@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#102f24" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PontoFace" />
+  <link rel="manifest" href="/manifest.webmanifest" id="app-manifest" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/mobile-dashboard-fix.css" />
+  <script src="/mobile-cards.js" defer></script>
+  <script>
+    (function () {
+      var p = window.location.pathname;
+      var isEmployee = p.indexOf('/funcionario/') === 0 || p === '/funcionario';
+      var isCompany = p.indexOf('/admin') === 0;
+      var isRmd = p.indexOf('/rmd') === 0;
+      var manifest = isEmployee
+        ? '/manifest-funcionario.webmanifest'
+        : isCompany
+          ? '/manifest-empresa.webmanifest'
+          : isRmd
+            ? '/manifest-rmd.webmanifest'
+            : '/manifest.webmanifest';
+      var link = document.getElementById('app-manifest');
+      if (link) link.href = manifest;
+
+      // Never redirect one installed area into another. In particular, do not
+      // use a previously visited employee link as a global startup redirect.
+      // Each PWA is identified by its own manifest/start_url/scope.
+      try { localStorage.removeItem('rmd_employee_start_url'); } catch (_) {}
+
+      if (isEmployee) {
+        window.__rmdEmployeeInstall = null;
+        window.addEventListener('beforeinstallprompt', function (event) {
+          event.preventDefault();
+          window.__rmdEmployeeInstall = event;
+          var button = document.getElementById('employee-install-button');
+          if (button) button.hidden = false;
+        });
+        window.addEventListener('appinstalled', function () {
+          var button = document.getElementById('employee-install-button');
+          if (button) button.remove();
+        });
+        window.addEventListener('DOMContentLoaded', function () {
+          var button = document.createElement('button');
+          button.id = 'employee-install-button';
+          button.type = 'button';
+          button.textContent = 'Instalar RMD Ponto';
+          button.hidden = true;
+          button.style.cssText = 'position:fixed;right:14px;top:14px;z-index:99999;border:0;border-radius:12px;padding:11px 14px;background:#0d9488;color:#fff;font:800 13px system-ui;box-shadow:0 5px 18px rgba(0,0,0,.22);';
+          button.onclick = async function () {
+            var promptEvent = window.__rmdEmployeeInstall;
+            if (promptEvent) {
+              await promptEvent.prompt();
+              await promptEvent.userChoice;
+              window.__rmdEmployeeInstall = null;
+              button.hidden = true;
+              return;
+            }
+            alert('No Android: abra o menu ⋮ do navegador e escolha “Instalar aplicativo” ou “Adicionar à tela inicial”. No iPhone: toque em Compartilhar e depois em “Adicionar à Tela de Início”.');
+          };
+          document.body.appendChild(button);
+        });
+      }
+    })();
+  </script>
+  <title>RMD PontoFace</title>
+  <script type="module" crossorigin src="/assets/index-Drw0p8pj.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DT55xF3i.css">
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>
