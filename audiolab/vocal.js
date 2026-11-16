@@ -176,12 +176,22 @@ const LabVoz = (function () {
   }
   function parar() { if (ativo) { const a = ativo; ativo = null; a.parar(); } }
 
-  function notaDaFaixa(st, a) { // avalia um alvo: % do tempo afinado e média do desvio
+  function notaDaFaixa(st, a, tol, minimo) { // avalia um alvo: % do tempo afinado (dentro de "tol" cents) e média do desvio
+    tol = tol || 50; minimo = minimo || 0.6;
     const ps = st.traco.filter((p) => p.t >= a.t0 + 0.35 && p.t <= a.t1 && p.m != null).map((p) => desvio(p.m, a.midi));
     if (ps.length < 4) return { ok: false, semVoz: true, pct: 0, media: 0 };
-    const pct = ps.filter((d) => Math.abs(d) <= 50).length / ps.length, media = ps.reduce((x, y) => x + y, 0) / ps.length;
-    return { ok: pct >= 0.6, pct, media };
+    const pct = ps.filter((d) => Math.abs(d) <= tol).length / ps.length, media = ps.reduce((x, y) => x + y, 0) / ps.length;
+    return { ok: pct >= minimo, pct, media };
   }
+  // exigência de cada nível (Básico, Intermediário, Avançado)
+  const NIV = [
+    { tol: 50, minimo: 0.6, cantar: 1.3, eco1: 5, eco3: 4, salto3: 4, saltos: [3, 4, 5, 7] },
+    { tol: 35, minimo: 0.65, cantar: 1.15, eco1: 6, eco3: 5, salto3: 5, saltos: [3, 4, 5, 7, 8, 9] },
+    { tol: 25, minimo: 0.7, cantar: 1.0, eco1: 8, eco3: 6, salto3: 7, saltos: [5, 7, 8, 9, -5, -7, 12] },
+  ];
+  const nivelDe = (f) => (typeof TreinosAL !== "undefined" ? TreinosAL.nivel(f) : 0);
+  const rotuloDe = (f) => (typeof TreinosAL !== "undefined" ? TreinosAL.rotulo(f) : "");
+  const seletorDe = (f, fn) => (typeof TreinosAL !== "undefined" ? TreinosAL.seletorNivel(f, fn) : null);
   const frase = (r) => r.semVoz ? "não ouvi a voz" : r.ok ? "afinado" : r.media > 0 ? "acima da nota" : "abaixo da nota";
 
   // ---------------------------------------------------------------- tela
@@ -218,29 +228,29 @@ const LabVoz = (function () {
     const TIPOS_AFINACAO = [["eco1", "🎯 Nota e eco (5 notas soltas)"], ["escala", "🎼 Escala Dó-Ré-Mi-Fá-Sol"], ["eco3", "🔁 Eco de 3 notas"], ["saltos", "↕️ Saltos (intervalos)"]];
     const semIcone = (t) => String(t).replace(/^\S+\s/, "");
     function treinoAfinacao(tipo) {
-      const v = V(); let itens = [];
-      if (tipo === "eco1") itens = Array.from({ length: 5 }, () => [sorteio(v.faixa[0], v.faixa[1])]);
-      if (tipo === "escala") itens = [[0, 2, 4, 5, 7].map((x) => v.base + x)];
-      if (tipo === "eco3") itens = Array.from({ length: 4 }, () => { let n = v.base + MAIOR[sorteio(0, 4)]; const s = [n]; for (let i = 0; i < 2; i++) { const pos = MAIOR.filter((x) => Math.abs(v.base + x - n) <= 4 && v.base + x !== n); n = v.base + pos[sorteio(0, pos.length - 1)]; s.push(n); } return s; });
-      if (tipo === "saltos") itens = [3, 4, 5, 7].map((iv) => [v.base, v.base + iv]);
+      const v = V(), nv = nivelDe("afinacao"), N = NIV[nv]; let itens = [];
+      if (tipo === "eco1") itens = Array.from({ length: N.eco1 }, () => [sorteio(v.faixa[0], v.faixa[1])]);
+      if (tipo === "escala") itens = nv === 0 ? [[0, 2, 4, 5, 7].map((x) => v.base + x)] : nv === 1 ? [[0, 2, 4, 5, 7, 5, 4, 2, 0].map((x) => v.base + x)] : [[0, 2, 4, 5, 7, 9, 11, 12].map((x) => v.base - 2 + x), [12, 11, 9, 7, 5, 4, 2, 0].map((x) => v.base - 2 + x)];
+      if (tipo === "eco3") itens = Array.from({ length: N.eco3 }, () => { let n = v.base + MAIOR[sorteio(0, 4)]; const s = [n]; for (let i = 0; i < 2; i++) { const pos = MAIOR.filter((x) => Math.abs(v.base + x - n) <= N.salto3 && v.base + x !== n); n = v.base + pos[sorteio(0, pos.length - 1)]; s.push(n); } return s; });
+      if (tipo === "saltos") itens = N.saltos.map((iv) => (iv < 0 ? [v.base + 7, v.base + 7 + iv] : [v.base, v.base + iv]));
       const alvos = [], fases = [], avaliar = []; let t = 0;
       const notas = [];
       itens.forEach((seq, k) => {
         const ouvir = seq.length * 0.9; fases.push([t, t + ouvir, "Ouça (" + (k + 1) + "/" + itens.length + ")"]);
         seq.forEach((m, i) => { alvos.push({ t0: t + i * 0.9, t1: t + i * 0.9 + 0.8, midi: m, ouvir: true }); notas.push([m, t + i * 0.9]); });
-        t += ouvir + 0.3; const cantar = seq.length * 1.3; fases.push([t, t + cantar, "Agora cante! (" + (k + 1) + "/" + itens.length + ")"]);
-        seq.forEach((m, i) => { const a = { t0: t + i * 1.3, t1: t + i * 1.3 + 1.2, midi: m }; alvos.push(a); avaliar.push(a); });
+        t += ouvir + 0.3; const cantar = seq.length * N.cantar; fases.push([t, t + cantar, "Agora cante! (" + (k + 1) + "/" + itens.length + ")"]);
+        seq.forEach((m, i) => { const a = { t0: t + i * N.cantar, t1: t + i * N.cantar + N.cantar - 0.1, midi: m }; alvos.push(a); avaliar.push(a); });
         t += cantar + 0.6;
       });
       AL.limpar(resultado, h("p", { class: "mudo" }, "Ouça a nota (faixa azul) e depois cante na faixa verde. A linha da sua voz fica verde quando está afinada."));
       sessao(painel, { alvos, fases, dur: t, sons: (t0) => notas.forEach(([m, dt]) => piano(m, t0 + dt, 0.85)) }, (st) => {
-        const rs = avaliar.map((a) => ({ a, r: notaDaFaixa(st, a) })), acertos = rs.filter((x) => x.r.ok).length;
+        const rs = avaliar.map((a) => ({ a, r: notaDaFaixa(st, a, N.tol, N.minimo) })), acertos = rs.filter((x) => x.r.ok).length;
         const pct = Math.round(acertos / rs.length * 100);
         AL.limpar(resultado, h("div", { class: "cartao" },
           h("h3", {}, "Resultado: " + acertos + " de " + rs.length + " notas afinadas (" + pct + "%)"),
           h("p", {}, pct >= 80 ? "🎉 Muito bem! Ouvido e voz trabalhando juntos." : pct >= 50 ? "👍 Bom caminho. Repita devagar, imaginando a nota antes de cantar." : "💪 Continue treinando: ouça a nota, cantarole por dentro e só então cante."),
           h("ul", {}, rs.map((x) => h("li", {}, (x.r.ok ? "✅ " : x.r.semVoz ? "🔇 " : "⚠️ ") + nome(x.a.midi) + ": " + frase(x.r) + (x.r.semVoz ? "" : " (" + Math.round(x.r.pct * 100) + "% do tempo na nota)")))),
-          guardar("Afinação · " + semIcone((TIPOS_AFINACAO.find((x) => x[0] === tipo) || ["", tipo])[1]), pct, acertos + " de " + rs.length + " notas afinadas")));
+          guardar("Afinação · " + semIcone((TIPOS_AFINACAO.find((x) => x[0] === tipo) || ["", tipo])[1]) + rotuloDe("afinacao"), pct, acertos + " de " + rs.length + " notas afinadas (margem ±" + N.tol + " cents)")));
       });
     }
     function afinadorLivre() {
@@ -251,6 +261,8 @@ const LabVoz = (function () {
       const tipos = TIPOS_AFINACAO;
       AL.limpar(corpo,
         h("p", {}, "O computador toca, a pessoa repete cantando. O microfone mostra na hora se ela chegou na nota. Vale cantar a nota em outra oitava (homem pode cantar a nota de mulher mais grave)."),
+        seletorDe("afinacao"),
+        h("p", { class: "mudo" }, "Básico: margem de ±50 cents, notas mais longas. Intermediário: ±35 cents, mais notas e saltos maiores. Avançado: ±25 cents, notas rápidas, escala de uma oitava e saltos descendo."),
         h("div", { class: "linha", style: { "flex-wrap": "wrap", gap: ".4rem" } },
           tipos.map(([t, n]) => h("button", { class: t === "eco1" ? "primario" : "", onclick: () => comMic(() => treinoAfinacao(t)) }, n)),
           h("button", { onclick: () => comMic(afinadorLivre) }, "🎙 Só mostrar a nota que estou cantando")));
@@ -380,7 +392,11 @@ const LabVoz = (function () {
       ["Descendo do Sol", [4, 3, 2, 1, 2, 3, 1, 0]], ["Arpejo e volta", [0, 2, 4, 2, 3, 1, 0]]];
     const grau = (base, g) => base + 12 * Math.floor(g / 7) + MAIOR[((g % 7) + 7) % 7];
     function segundaVoz(melIdx, acima, guia, lento, comMicrofone) {
-      const v = V(), graus = MELODIAS[melIdx][1], d = lento ? 1.25 : 0.9, n = graus.length, bloco = n * d;
+      const nv = nivelDe("segunda");
+      if (nv >= 1) guia = false;            // Intermediário e Avançado: sem a 2ª voz de guia
+      if (nv >= 2) lento = false;           // Avançado: andamento normal (e mais rápido)
+      const tol = [50, 40, 30][nv];
+      const v = V(), graus = MELODIAS[melIdx][1], d = lento ? 1.25 : nv >= 2 ? 0.75 : 0.9, n = graus.length, bloco = n * d;
       const mel = graus.map((g) => grau(v.base, g)), seg = graus.map((g) => grau(v.base, g + (acima ? 2 : -2)));
       if (!comMicrofone) {
         parar(); const c = audio(), t0 = c.currentTime + 0.1;
@@ -406,7 +422,7 @@ const LabVoz = (function () {
         if (guia) seg.forEach((m, i) => vozSintetica({ t: t0 + t3 + i * d, midi: m, dur: d * 0.95, vogal: "U", vol: 0.22 }));
       } }, (st) => {
         // o alvo é a 2ª voz: se a pessoa cantou a melodia em vez da 2ª voz, conta como erro (e o aviso explica)
-        const rs = cantar.map((a, i) => ({ a, r: notaDaFaixa(st, a), mel: mel[i] }));
+        const rs = cantar.map((a, i) => ({ a, r: notaDaFaixa(st, a, tol), mel: mel[i] }));
         const ok = rs.filter((x) => x.r.ok).length, pct = Math.round(ok / rs.length * 100);
         const foiMelodia = rs.filter((x) => !x.r.ok && !x.r.semVoz && Math.abs(desvio(x.mel, x.a.midi) - x.r.media) < 80).length >= rs.length / 2;
         AL.limpar(resultado, h("div", { class: "cartao" },
@@ -414,7 +430,7 @@ const LabVoz = (function () {
           h("p", {}, pct >= 80 ? "🎉 Ótimo! Você segurou a sua voz junto com a melodia." : pct >= 50 ? "👍 Bom começo. Treine de novo com a 2ª voz de guia e mais devagar." : "💪 Comece pelo modo Fácil (com a 2ª voz de guia) e mais devagar."),
           foiMelodia ? h("p", { class: "aviso" }, "Parece que a voz foi para a melodia (o piano) em vez da 2ª voz. Isso é o mais comum no começo: ouça a 2ª voz sozinha algumas vezes antes. (Sem fone de ouvido, o microfone também pode ter ouvido o piano.)") : null,
           h("ul", {}, rs.map((x) => h("li", {}, (x.r.ok ? "✅ " : x.r.semVoz ? "🔇 " : "⚠️ ") + nome(x.a.midi) + " (melodia em " + nome(x.mel) + "): " + frase(x.r)))),
-          guardar("Segunda voz · " + MELODIAS[melIdx][0] + " · terça " + (acima ? "acima" : "abaixo") + (guia ? " · com guia" : " · sem guia") + (lento ? " · devagar" : ""), pct, ok + " de " + rs.length + " notas certas")));
+          guardar("Segunda voz · " + MELODIAS[melIdx][0] + " · terça " + (acima ? "acima" : "abaixo") + rotuloDe("segunda"), pct, ok + " de " + rs.length + " notas certas" + (guia ? " · com guia" : " · sem guia") + (lento ? " · devagar" : ""))));
       });
     }
     function telaSegundaVoz() {
@@ -424,6 +440,8 @@ const LabVoz = (function () {
       const ler = () => [Number(mel.value), lado.value === "1", guia.checked, lento.checked];
       AL.limpar(corpo,
         h("p", {}, "Treino de harmonia: o computador toca a melodia e a pessoa canta a 2ª voz, uma terça acima ou abaixo. Primeiro ouve a melodia, depois ouve a 2ª voz sozinha e então canta a 2ª voz junto com a melodia."),
+        seletorDe("segunda"),
+        h("p", { class: "mudo" }, "Básico: pode usar a 2ª voz de guia e mais devagar. Intermediário: sem guia. Avançado: sem guia, mais rápido e com margem menor."),
         h("div", { class: "linha", style: { gap: ".6rem", "flex-wrap": "wrap", "align-items": "center" } }, h("span", {}, "Melodia:"), mel, lado),
         h("div", { class: "linha", style: { gap: "1rem", "flex-wrap": "wrap", margin: ".4rem 0" } },
           h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center" } }, guia, "Fácil: a 2ª voz toca baixinho de guia"),

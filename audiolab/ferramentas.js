@@ -205,14 +205,18 @@ const FerramentasAL = (() => {
   // Como os treinos de ouvido de técnico de som: o som toca com UMA faixa reforçada e a pessoa descobre qual foi.
   // O nível Médio usa as mesmas 5 faixas do EQ da mesa do AudioLab (100 Hz, 300 Hz, 1 kHz, 2,5 kHz e 8 kHz).
   const NIVEIS_OUVIDO = {
-    facil: { nome: "Fácil", ganho: 12, faixas: [[100, "GRAVE", "100 Hz"], [1000, "MÉDIO", "1 kHz"], [8000, "AGUDO", "8 kHz"]] },
-    medio: { nome: "Médio", ganho: 9, faixas: [[100, "GRAVE", "100 Hz"], [300, "MÉDIO-GRAVE", "300 Hz"], [1000, "MÉDIO", "1 kHz"], [2500, "MÉDIO-AGUDO", "2,5 kHz"], [8000, "AGUDO", "8 kHz"]] },
-    dificil: { nome: "Difícil", ganho: 6, faixas: [63, 125, 250, 500, 1000, 2000, 4000, 8000].map((f) => [f, f >= 1000 ? f / 1000 + " kHz" : f + " Hz", ""]) },
+    facil: { nome: "Básico", ganho: 12, faixas: [[100, "GRAVE", "100 Hz"], [1000, "MÉDIO", "1 kHz"], [8000, "AGUDO", "8 kHz"]] },
+    medio: { nome: "Intermediário", ganho: 9, faixas: [[100, "GRAVE", "100 Hz"], [300, "MÉDIO-GRAVE", "300 Hz"], [1000, "MÉDIO", "1 kHz"], [2500, "MÉDIO-AGUDO", "2,5 kHz"], [8000, "AGUDO", "8 kHz"]] },
+    dificil: { nome: "Avançado", ganho: 6, faixas: [63, 125, 250, 500, 1000, 2000, 4000, 8000].map((f) => [f, f >= 1000 ? f / 1000 + " kHz" : f + " Hz", ""]) },
   };
   const PERGUNTAS_OUVIDO = 10;
   function telaOuvido(el) {
     const arquivoAudio = opcoesAtuais.arquivoAudio;
-    const nivel = h("select", { "aria-label": "Nível" }, Object.entries(NIVEIS_OUVIDO).map(([k, n]) => h("option", { value: k }, n.nome + " (" + n.faixas.length + " faixas, +" + n.ganho + " dB)")));
+    // o nível vem do seletor comum (Básico, Intermediário, Avançado); sem treinos.js, usa um seletor simples
+    const CHAVES = ["facil", "medio", "dificil"];
+    const nivelSimples = h("select", { "aria-label": "Nível" }, CHAVES.map((k) => h("option", { value: k }, NIVEIS_OUVIDO[k].nome)));
+    const nivel = { get value() { return typeof TreinosAL !== "undefined" ? CHAVES[TreinosAL.nivel("ouvido")] : nivelSimples.value; } };
+    const seletor = typeof TreinosAL !== "undefined" ? TreinosAL.seletorNivel("ouvido") : h("div", {}, "Nível: ", nivelSimples);
     const fonteSel = h("select", { "aria-label": "Som do treino" }, h("option", { value: "rosa" }, "Ruído rosa (o som de teste dos técnicos)"), arquivoAudio ? h("option", { value: "arquivo" }, "Louvor que está no player (Louvores da aula)") : null);
     const alternar = h("input", { type: "checkbox", checked: true, style: { width: "auto" } });
     const area = h("div"), resultado = h("div");
@@ -259,7 +263,7 @@ const FerramentasAL = (() => {
           h("p", {}, pct >= 80 ? (nivel.value === "dificil" ? "🎉 Ouvido de técnico!" : "🎉 Muito bem! Tente o próximo nível.") : pct >= 50 ? "👍 Bom caminho. Repita e preste atenção no A × B." : "💪 Comece no Fácil e alterne A e B várias vezes antes de responder."),
           Object.keys(conf).length ? [h("p", {}, "Onde você confundiu:"), h("ul", {}, Object.entries(conf).map(([t, n]) => h("li", {}, t + (n > 1 ? " (" + n + " vezes)" : ""))))] : null,
           h("p", { class: "mudo" }, "Dica: grave = peso e ronco; médio-grave = voz \"embolada\"; médio = som de telefone/corneta; médio-agudo = presença e ardido; agudo = brilho e chiado."),
-          typeof TreinosAL !== "undefined" ? TreinosAL.caixa("ouvido", "Qual frequência mudou? · " + N.nome + " · " + (fonteSel.value === "rosa" ? "ruído rosa" : "louvor"), pct, acertos + " de " + PERGUNTAS_OUVIDO + " acertos") : null));
+          typeof TreinosAL !== "undefined" ? TreinosAL.caixa("ouvido", "Qual frequência mudou? · " + (fonteSel.value === "rosa" ? "ruído rosa" : "louvor") + " · " + N.nome, pct, acertos + " de " + PERGUNTAS_OUVIDO + " acertos") : null));
       }
       const botoes = N.faixas.map((x, i) => h("button", { style: { "min-width": "7rem" }, onclick: () => responder(i) }, x[1], x[2] ? h("small", { style: { display: "block", opacity: ".8" } }, x[2]) : null));
       timer = setInterval(() => { if (alternar.checked && !travado) modo(!comMudanca); }, 2000);
@@ -275,7 +279,8 @@ const FerramentasAL = (() => {
     }
     AL.limpar(el, h("div", { class: "cartao" }, h("h2", {}, "Treino de ouvido: qual frequência mudou?"),
       h("p", {}, "O som toca normal (A) e com UMA faixa reforçada (B). Descubra qual faixa mudou. São " + PERGUNTAS_OUVIDO + " perguntas. É o treino que os técnicos de som fazem para achar rápido o problema na mesa."),
-      h("div", { class: "linha", style: { gap: ".6rem", "flex-wrap": "wrap", "align-items": "center" } }, h("span", {}, "Nível:"), nivel, h("span", {}, "Som:"), fonteSel),
+      seletor, h("p", { class: "mudo" }, "Básico: 3 faixas (grave, médio, agudo), +12 dB. Intermediário: as 5 faixas do EQ da mesa, +9 dB. Avançado: 8 faixas, só +6 dB."),
+      h("div", { class: "linha", style: { gap: ".6rem", "flex-wrap": "wrap", "align-items": "center" } }, h("span", {}, "Som:"), fonteSel),
       h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center", margin: ".4rem 0" } }, alternar, "Alternar A e B sozinho a cada 2 segundos"),
       h("button", { class: "primario", onclick: comecar }, "▶ Começar o treino"),
       h("p", { class: "mudo" }, "Use fone de ouvido ou caixas boas: no alto-falante do celular os graves quase não aparecem.")), area, resultado);
@@ -349,48 +354,60 @@ const FerramentasAL = (() => {
       ictus.filter((ic) => t - ic.t < 2.5).forEach((ic) => { g.strokeStyle = ic.cor || "#49c7ef"; g.lineWidth = 4; g.beginPath(); g.arc(ic.x, ic.y, 16, 0, 7); g.stroke(); if (ic.num) { g.fillStyle = "#fff"; g.font = "bold 18px Segoe UI, Arial"; g.textAlign = "center"; g.fillText(ic.num, ic.x, ic.y + 6); } });
       // metrônomo: bolinhas dos tempos
       if (sessao) {
-        const S = sessao, k = Math.floor((t + 0.08 - S.t0) / S.beat), tempos = S.tempos;
+        const S = sessao, tempos = S.tempos, tt = t + 0.08, idx = S.esperados.findIndex((x) => x > tt);
+        // k = tempo atual (-1 na contagem; total+1 = acabou)
+        const k = tt < S.t0 ? -1 : idx < 0 ? (tt > S.esperados[S.total - 1] + 60 / S.bpm2 ? S.total + 1 : S.total - 1) : idx - 1;
         for (let i = 0; i < tempos; i++) { g.fillStyle = k >= 0 && ((k % tempos) + tempos) % tempos === i ? (i === 0 ? "#ef6b6b" : "#7fd18b") : "rgba(255,255,255,.18)"; g.beginPath(); g.arc(30 + i * 34, 30, 12, 0, 7); g.fill(); }
         g.fillStyle = "#f2c94c"; g.font = "bold 22px Segoe UI, Arial"; g.textAlign = "left";
         g.fillText(k < 0 ? "Prepare... (1 compasso de contagem)" : k < S.total ? "Rege! compasso " + (Math.floor(k / tempos) + 1) + " de " + S.nComp : "Pronto!", 30 + tempos * 34, 38);
         if (k >= S.total + 1) terminar();
       }
     }
+    // exigência de cada nível: margem do ictus e, no Avançado, o andamento muda no meio (o regente acompanha)
+    const NIV_REG = [{ margem: 0.12, frac: 0.15, muda: 0 }, { margem: 0.10, frac: 0.12, muda: 0 }, { margem: 0.08, frac: 0.10, muda: 0.15 }];
+    const nivelReg = () => (typeof TreinosAL !== "undefined" ? TreinosAL.nivel("regencia") : 0);
     function comecar() {
       if (!stream) { AL.toast("Ligue a câmera primeiro.", true); return; }
+      const nv = nivelReg(), NR = NIV_REG[nv];
       const tempos = Number(compasso.value), b = Math.max(50, Math.min(140, Number(bpm.value) || 72)), nComp = Number(compassos.value), beat = 60 / b, c = audio();
       const t0 = c.currentTime + 0.4 + tempos * beat; // depois de 1 compasso de contagem
-      for (let k = -tempos; k < tempos * nComp; k++) { // cliques do metrônomo (o 1 de cada compasso mais forte)
-        const t = t0 + k * beat, o = c.createOscillator(), ga = c.createGain(), forte = ((k % tempos) + tempos) % tempos === 0;
+      // tempos esperados (no Avançado, da metade em diante o andamento sobe ou desce 15%)
+      const b2 = NR.muda ? Math.round(b * (1 + (Math.random() < 0.5 ? -NR.muda : NR.muda))) : b, meio = Math.floor(nComp / 2) * tempos;
+      const esperados = []; let te = t0;
+      for (let k = 0; k < tempos * nComp; k++) { esperados.push(te); te += 60 / (k + 1 >= meio && NR.muda ? b2 : b); }
+      const cliques = Array.from({ length: tempos }, (_, i) => t0 - (tempos - i) * beat).concat(esperados);
+      cliques.forEach((t, j) => { const k = j - tempos;
+        const o = c.createOscillator(), ga = c.createGain(), forte = ((k % tempos) + tempos) % tempos === 0;
         o.frequency.value = forte ? 1500 : 1000; ga.gain.setValueAtTime(0.0001, t); ga.gain.exponentialRampToValueAtTime(forte ? 0.5 : 0.3, t + 0.003); ga.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
         o.connect(ga).connect(c.destination); o.start(t); o.stop(t + 0.08);
-      }
+      });
       ictus = []; AL.limpar(resultado);
-      sessao = { t0, beat, tempos, nComp, total: tempos * nComp, bpm: b, fim: false };
-      status.textContent = "Ouça 1 compasso de contagem e comece a reger junto com o metrônomo.";
+      sessao = { t0, beat, tempos, nComp, total: tempos * nComp, bpm: b, bpm2: b2, esperados, nv, NR, fim: false };
+      status.textContent = "Ouça 1 compasso de contagem e comece a reger junto com o metrônomo." + (b2 !== b ? " Atenção: no meio, o andamento muda!" : "");
     }
     function terminar() {
       const S = sessao; if (!S || S.fim) return; S.fim = true; sessao = null;
-      const esperados = Array.from({ length: S.total }, (_, k) => S.t0 + k * S.beat);
-      const dentro = ictus.filter((ic) => ic.t > S.t0 - S.beat / 2 && ic.t < S.t0 + (S.total - 0.5) * S.beat);
+      const esperados = S.esperados, fimT = esperados[S.total - 1] + 30 / S.bpm2;
+      const dentro = ictus.filter((ic) => ic.t > S.t0 - S.beat / 2 && ic.t < fimT);
       const usados = new Set(); let bons = 0, quase = 0; const desvios = [];
       esperados.forEach((te, k) => {
         let mel = -1, md = 1e9; dentro.forEach((ic, i) => { const dd = Math.abs(ic.t - te); if (!usados.has(i) && dd < md) { md = dd; mel = i; } });
         if (mel < 0 || md > S.beat * 0.45) return;
         usados.add(mel); const off = dentro[mel].t - te; desvios.push(off);
         dentro[mel].num = (k % S.tempos) + 1;
-        if (Math.abs(off) <= Math.max(0.12, S.beat * 0.15)) { bons++; dentro[mel].cor = "#7fd18b"; } else { quase++; dentro[mel].cor = "#f2c94c"; }
+        if (Math.abs(off) <= Math.max(S.NR.margem, S.beat * S.NR.frac)) { bons++; dentro[mel].cor = "#7fd18b"; } else { quase++; dentro[mel].cor = "#f2c94c"; }
       });
       const pct = Math.round((bons + quase * 0.5) / S.total * 100), aMais = dentro.length - usados.size;
       const inter = dentro.map((ic) => ic.t).sort((a, b) => a - b).map((t, i, a) => (i ? t - a[i - 1] : null)).filter((x) => x && x > 0.2 && x < 2).sort((a, b) => a - b);
       const bpmMedio = inter.length ? Math.round(60 / inter[Math.floor(inter.length / 2)]) : null;
       const media = desvios.length ? desvios.reduce((a, b) => a + b, 0) / desvios.length : 0;
-      const nome = S.tempos + "/4 a " + S.bpm + " BPM";
+      const nome = S.tempos + "/4 a " + S.bpm + (S.bpm2 !== S.bpm ? "→" + S.bpm2 : "") + " BPM" + (typeof TreinosAL !== "undefined" ? TreinosAL.rotulo("regencia") : "");
       AL.limpar(resultado, h("div", { class: "cartao" },
         h("h3", {}, "Regência " + nome + ": " + bons + " de " + S.total + " tempos no lugar (" + pct + "%)"),
         h("ul", {},
           h("li", {}, "No lugar (verde): " + bons + " · quase (amarelo): " + quase + " · faltaram: " + (S.total - bons - quase)),
-          bpmMedio ? h("li", {}, "Seu andamento: cerca de " + bpmMedio + " BPM (o metrônomo estava em " + S.bpm + ")" + (Math.abs(bpmMedio - S.bpm) <= 4 ? " ✅" : bpmMedio > S.bpm ? " — correu um pouco" : " — atrasou um pouco")) : null,
+          bpmMedio && S.bpm2 === S.bpm ? h("li", {}, "Seu andamento: cerca de " + bpmMedio + " BPM (o metrônomo estava em " + S.bpm + ")" + (Math.abs(bpmMedio - S.bpm) <= 4 ? " ✅" : bpmMedio > S.bpm ? " — correu um pouco" : " — atrasou um pouco")) : null,
+          S.bpm2 !== S.bpm ? h("li", {}, "O andamento mudou de " + S.bpm + " para " + S.bpm2 + " BPM no meio: os tempos no lugar mostram se você acompanhou.") : null,
           desvios.length ? h("li", {}, Math.abs(media) < 0.07 ? "O ictus caiu junto com o clique ✅" : media < 0 ? "O ictus veio um pouco ANTES do clique (adiantado)" : "O ictus veio um pouco DEPOIS do clique (atrasado)") : null,
           aMais > 0 ? h("li", {}, aMais + " gesto(s) a mais: deixe o ictus claro (desça e quique) e o resto do gesto mais leve.") : null),
         h("p", { class: "mudo" }, "Como o sistema mede: ele segue o que se mexe na imagem (a mão) e marca o ponto mais baixo de cada descida. Mexer o corpo todo, ou gente passando atrás, atrapalha. É um guia de treino: o professor confere o desenho do compasso."),
@@ -399,6 +416,8 @@ const FerramentasAL = (() => {
     }
     AL.limpar(el, h("div", { class: "cartao" }, h("h2", {}, "Regência com a câmera"),
       h("p", {}, "O metrônomo toca e a pessoa rege na frente da câmera. O sistema marca cada ictus (o ponto do tempo) e diz se caiu junto com o clique e se o andamento ficou firme."),
+      typeof TreinosAL !== "undefined" ? TreinosAL.seletorNivel("regencia") : null,
+      h("p", { class: "mudo" }, "Básico: margem de 0,12 s. Intermediário: 0,10 s. Avançado: 0,08 s e o andamento muda no meio do treino."),
       h("div", { class: "linha", style: { gap: ".6rem", "flex-wrap": "wrap", "align-items": "center" } },
         h("span", {}, "Compasso:"), compasso, h("span", {}, "Andamento (BPM):"), bpm, compassos),
       h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", margin: ".5rem 0" } },

@@ -9,6 +9,49 @@ const TreinosAL = (() => {
   let modo = null, token = null, ultimoNome = "", conhecidos = null, serie = 0, enviarCasa = null;
   const AREAS = { voz: "Laboratório da voz", ouvido: "Treino de ouvido", regencia: "Regência com câmera" };
 
+  // ---------------- níveis (16/11/2026): Básico → Intermediário → Avançado
+  // Na aula (professor e celular na sala) todos os níveis ficam abertos. Em casa, o próximo nível abre depois de
+  // 3 treinos com 80% ou mais no nível de agora (o app de casa informa isso com definirLiberados).
+  const NIVEIS = ["Básico", "Intermediário", "Avançado"];
+  const COM_NIVEL = { afinacao: "Afinação", segunda: "Segunda voz", ouvido: "Treino de ouvido", regencia: "Regência com câmera" };
+  const PRECISA_NIVEL = 3;
+  let liberados = null; // null = tudo aberto; senão { familia: { max: 0..2, faltam: n } }
+  const escolhido = {}, forcados = {};
+  function definirLiberados(obj) { liberados = obj; Object.keys(escolhido).forEach((f) => { escolhido[f] = Math.min(escolhido[f], maxNivel(f)); }); }
+  const maxNivel = (f) => Math.max(liberados ? ((liberados[f] || {}).max || 0) : 2, forcados[f] != null ? forcados[f] : -1);
+  /** Exercício mandado pelo professor: abre o nível que ele escolheu, mesmo que ainda não tenha sido liberado. */
+  function forcarNivel(f, n) { forcados[f] = n; escolhido[f] = n; }
+
+  // ---------------- exercícios que o professor manda para as turmas (aula com turmas, 16/11/2026)
+  // ferramenta/aba/botao: onde o app do aluno abre e qual botão ele toca para começar
+  const TAREFAS = {
+    "afinacao:eco1": { turmas: ["voz"], familia: "afinacao", nome: "Afinação · Nota e eco", ferramenta: "Laboratório da voz", aba: "🎯 Afinação", botao: "🎯 Nota e eco (5 notas soltas)" },
+    "afinacao:escala": { turmas: ["voz"], familia: "afinacao", nome: "Afinação · Escala", ferramenta: "Laboratório da voz", aba: "🎯 Afinação", botao: "🎼 Escala Dó-Ré-Mi-Fá-Sol" },
+    "afinacao:eco3": { turmas: ["voz"], familia: "afinacao", nome: "Afinação · Eco de 3 notas", ferramenta: "Laboratório da voz", aba: "🎯 Afinação", botao: "🔁 Eco de 3 notas" },
+    "afinacao:saltos": { turmas: ["voz"], familia: "afinacao", nome: "Afinação · Saltos", ferramenta: "Laboratório da voz", aba: "🎯 Afinação", botao: "↕️ Saltos (intervalos)" },
+    "segunda": { turmas: ["voz"], familia: "segunda", nome: "Segunda voz", ferramenta: "Laboratório da voz", aba: "🎶 Segunda voz", botao: "🎙 Cantar a 2ª voz com o microfone" },
+    "vogais": { turmas: ["voz"], familia: "vogais", nome: "Vogais · nota longa", ferramenta: "Laboratório da voz", aba: "🗣 Vogais e projeção", botao: null, semNivel: true },
+    "respiracao": { turmas: ["voz"], familia: "respiracao", nome: "Respiração · sssss", ferramenta: "Laboratório da voz", aba: "💨 Respiração (sssss)", botao: "🎙 Começar o Sssss", semNivel: true },
+    "regencia": { turmas: ["regencia"], familia: "regencia", nome: "Regência com câmera", ferramenta: "Regência com câmera", botao: "📷 Ligar a câmera", regencia: true },
+    "ouvido": { turmas: ["som", "voz", "regencia"], familia: "ouvido", nome: "Treino de ouvido", ferramenta: "Treino de ouvido", botao: "▶ Começar o treino" },
+  };
+  const TURMAS = { som: "🎚️ Operadores de som", voz: "🎤 Vozes (cantores)", regencia: "🎼 Regência" };
+  function nivel(f) { return Math.min(escolhido[f] != null ? escolhido[f] : maxNivel(f), maxNivel(f)); }
+  const rotulo = (f) => " · " + NIVEIS[nivel(f)];
+  /** Caixa "Nível" para pôr em cima de um treino. aoMudar(novoIndice) é opcional. */
+  function seletorNivel(f, aoMudar) {
+    const max = maxNivel(f), info = h("small", { class: "mudo" });
+    const sel = h("select", { "aria-label": "Nível do treino", style: { width: "auto" }, onchange: () => { escolhido[f] = Number(sel.value); mostrar(); if (aoMudar) aoMudar(Number(sel.value)); } },
+      NIVEIS.map((n, i) => h("option", { value: i, disabled: i > max, selected: i === nivel(f) }, (i > max ? "🔒 " : "") + n)));
+    function mostrar() {
+      const l = liberados && liberados[f];
+      info.textContent = !liberados ? "" : max >= 2 ? "Todos os níveis liberados 🎉"
+        : "Para liberar o " + NIVEIS[max + 1] + ": mais " + (l ? l.faltam : PRECISA_NIVEL) + " treino(s) com 80% ou mais no " + NIVEIS[max] + ".";
+    }
+    mostrar();
+    return h("div", { class: "linha", style: { gap: ".5rem", "align-items": "center", "flex-wrap": "wrap", margin: ".3rem 0" } }, h("b", {}, "Nível:"), sel, info);
+  }
+
   function comoAluno(tok) { modo = "aluno"; token = tok; }
   function comoProfessor() { modo = "professor"; }
   /** Treino em casa (site no celular): quem envia é o app de casa (com fila quando está sem internet). */
@@ -58,5 +101,5 @@ const TreinosAL = (() => {
     return el;
   }
 
-  return { comoAluno, comoProfessor, comoCasa, caixa, AREAS, modo: () => modo };
+  return { comoAluno, comoProfessor, comoCasa, caixa, NIVEIS, COM_NIVEL, PRECISA_NIVEL, definirLiberados, nivel, rotulo, seletorNivel, forcarNivel, TAREFAS, TURMAS, AREAS, modo: () => modo };
 })();
