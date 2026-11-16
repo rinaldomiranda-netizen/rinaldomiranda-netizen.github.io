@@ -486,14 +486,23 @@ const LabVoz = (function () {
       enviarTelao({ tipo: "vivo", aba: titulos[abaAtual], st: { agora: a, traco: st.traco.filter((p) => p.t >= a - 10), alvos: st.alvos.filter((x) => x.t1 >= a - 10 && x.t0 <= a + 2), curvaPts, texto: st.texto, db: st.db },
         grande: grande != null ? grande : notaGrande.textContent, classe: grande != null ? "" : notaGrande.className, dica: dicaTxt != null ? dicaTxt : dica.textContent });
     };
-    function abrir(id) { parar(); abaAtual = id; naTela.checked = !op.semTelao && (id === "afinacao" || id === "segunda" || id === "respiracao"); enviarTelao({ tipo: "fim" }); botoes.forEach((b) => b.classList.toggle("ligado", b.dataset.aba === id)); AL.limpar(resultado); (ABAS.find((a) => a[0] === id) || ABAS[0])[2](); }
+    // área da medição (nota grande, gráfico, aviso do microfone e resultado): fica logo embaixo do exercício tocado
+    // (pedido do Rinaldo, 16/11/2026: no Aquecimento o gráfico ficava lá no fim, depois de todos os exercícios)
+    const areaMedida = h("div", { class: "area-medida" },
+      h("div", { style: { display: "flex", gap: "1rem", "align-items": "center", margin: ".6rem 0 .2rem", "flex-wrap": "wrap" } }, notaGrande, dica),
+      graf.cv, status, resultado);
+    corpo.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b || !corpo.contains(b)) return;
+      const lugar = b.closest(".cartao") || b.parentNode;
+      if (lugar && lugar.nextSibling !== areaMedida) lugar.after(areaMedida);
+      setTimeout(() => graf.cv.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+    });
+    function abrir(id) { el.append(areaMedida); parar(); abaAtual = id; naTela.checked = !op.semTelao && (id === "afinacao" || id === "segunda" || id === "respiracao"); enviarTelao({ tipo: "fim" }); botoes.forEach((b) => b.classList.toggle("ligado", b.dataset.aba === id)); AL.limpar(resultado); (ABAS.find((a) => a[0] === id) || ABAS[0])[2](); }
     AL.limpar(el,
       h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".5rem" } }, botoes),
       h("div", { class: "linha", style: { gap: ".6rem", "align-items": "center", "flex-wrap": "wrap" } }, h("span", {}, "Quem vai cantar:"), selVoz, h("button", { class: "perigo", onclick: () => { parar(); if (mic) mic.fechar(); status.textContent = "Microfone desligado."; } }, "■ Parar e desligar o microfone"),
         op.semTelao ? null : h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center" } }, naTela, "📺 Mostrar no telão (gráfico e resultado)")),
-      corpo,
-      h("div", { style: { display: "flex", gap: "1rem", "align-items": "center", margin: ".6rem 0 .2rem", "flex-wrap": "wrap" } }, notaGrande, dica),
-      graf.cv, status, resultado);
+      corpo, areaMedida);
     abrir(modoInicial || "afinacao");
   }
   function desligar() { parar(); if (mic) mic.fechar(); transmissor = null; enviarTelao({ tipo: "fim" }); }
