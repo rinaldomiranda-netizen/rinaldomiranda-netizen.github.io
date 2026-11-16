@@ -34,7 +34,19 @@
   const diaLocal = (iso) => { const d = new Date(iso); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   const ONDE = { afinacao: ["Laboratório da voz", "🎯 Afinação"], segunda: ["Laboratório da voz", "🎶 Segunda voz"], aquecimento: ["Laboratório da voz", "🔥 Aquecimento"],
     vogais: ["Laboratório da voz", "🗣 Vogais e projeção"], respiracao: ["Laboratório da voz", "💨 Respiração (sssss)"], ouvido: ["Treino de ouvido"], regencia: ["Regência com câmera"] };
-  const recupEl = h("div"), avisoCert = h("div"), corpoBoletim = h("div");
+  const recupEl = h("div"), avisoCert = h("div"), corpoBoletim = h("div"), seguidosEl = h("div");
+  // dias seguidos treinando (conta até hoje; se ainda não treinou hoje, a sequência de ontem continua valendo)
+  function desenharSeguidos() {
+    const dias = new Set(resumo.dias || []);
+    const hoje = new Date(), dia = (d) => diaLocal(d.toISOString());
+    const treinouHoje = dias.has(dia(hoje));
+    const d = new Date(hoje); if (!treinouHoje) d.setDate(d.getDate() - 1);
+    let n = 0; while (dias.has(dia(d)) && n < 400) { n++; d.setDate(d.getDate() - 1); }
+    const txt = n === 0 ? "Treine hoje para começar a sua sequência de dias! 💪"
+      : treinouHoje ? (n === 1 ? "🔥 Você treinou hoje. Volte amanhã para fazer 2 dias seguidos!" : "🔥 " + n + " dias seguidos treinando! Continue amanhã.")
+        : "🔥 " + n + (n === 1 ? " dia" : " dias seguidos") + " — treine hoje para não perder a sequência!";
+    AL.limpar(seguidosEl, h("p", { style: { margin: ".4rem 0 0", "font-weight": "600" } }, txt));
+  }
   let resumo = ler("al_casa_resumo", { pendencias: [], itens: [], documentos: [], info: {} });
   function aplicarResumo() {
     const cont = {};
@@ -42,6 +54,7 @@
     const lib = {}, P = TreinosAL.PRECISA_NIVEL;
     Object.keys(TreinosAL.COM_NIVEL).forEach((f) => { const c = cont[f] || [0, 0, 0]; let max = 0; if (c[0] >= P) max = 1; if (max === 1 && c[1] >= P) max = 2; lib[f] = { max, faltam: max < 2 ? Math.max(0, P - c[max]) : 0 }; });
     TreinosAL.definirLiberados(lib);
+    desenharSeguidos();
     desenharBoletim();
     const pend = resumo.pendencias || [];
     if (!pend.length) { AL.limpar(recupEl); return; }
@@ -62,7 +75,7 @@
   let abrirTreino = () => {};
   async function atualizarResumo() {
     if (!conta) return;
-    try { const d = await nuvem({ acao: "aluno_resumo", codigo: conta.codigo }); resumo = { pendencias: d.pendencias || [], itens: d.itens || [], documentos: d.documentos || [], info: d.info || {} }; gravar("al_casa_resumo", resumo); } catch (e) { /* sem internet: usa o guardado */ }
+    try { const d = await nuvem({ acao: "aluno_resumo", codigo: conta.codigo }); resumo = { pendencias: d.pendencias || [], itens: d.itens || [], documentos: d.documentos || [], info: d.info || {}, dias: d.dias || [] }; gravar("al_casa_resumo", resumo); } catch (e) { if (e.status === 403) { sair("O seu código mudou ou foi desativado. Peça o código novo ao professor."); return; } /* sem internet: usa o guardado */ }
     aplicarResumo();
   }
 
@@ -87,7 +100,7 @@
       tarefas = d.tarefas || [];
       if (tarefaAtiva && !tarefas.some((t) => t.id === tarefaAtiva.id)) tarefaAtiva = null; // o professor encerrou
       if (tarefas.map((t) => t.id).join() !== antes) { desenharTarefas(); if (tarefas.some((t) => !feitas().includes(t.id))) { try { navigator.vibrate && navigator.vibrate(200); } catch (e) { /* ok */ } } }
-    } catch (e) { /* sem internet: tenta de novo */ }
+    } catch (e) { if (e.status === 403 && conta) sair("O seu código mudou ou foi desativado. Peça o código novo ao professor."); /* sem internet: tenta de novo */ }
   }
   function comecarTarefa(t) {
     const c = TreinosAL.TAREFAS[t.tipo]; if (!c) return;
@@ -193,7 +206,7 @@
         gravar("al_casa_fila", f.slice(-200)); mostrarFila();
         return { fila: true };
       }
-      if (e.status === 403) setTimeout(() => sair("O seu código foi desativado. Fale com o professor."), 1500);
+      if (e.status === 403) setTimeout(() => sair("O seu código mudou ou foi desativado. Peça o código novo ao professor."), 1500);
       throw e;
     }
   }
@@ -270,7 +283,7 @@
     AL.limpar(app,
       h("div", { class: "cartao" }, h("h2", {}, "Olá, " + conta.nome.split(" ")[0] + "! 👋"),
         h("p", { class: "mudo" }, "Escolha um treino. No fim de cada um, a nota vai sozinha para o professor. Use fone de ouvido nos treinos de voz e de ouvido."),
-        instado(), filaEl),
+        seguidosEl, instado(), filaEl),
       tarefaEl, avisoCert, recupEl, barra, corpoTreino, corpoBoletim, corpoNotas);
     trocar("treino"); mostrarFila(); enviarFila(); atualizarResumo();
     // durante a aula o boletim muda: confere a cada minuto enquanto o app está aberto
