@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "br.com.rmd.ponto",
+      "sha256_cert_fingerprints": [
+        "D5:42:A4:E1:14:8B:39:6F:2F:DD:16:49:0B:E1:E4:AA:5C:63:70:E9:FC:D0:D0:48:67:BA:8B:A0:46:48:5D:E4"
+      ]
+    }
+  }
+]

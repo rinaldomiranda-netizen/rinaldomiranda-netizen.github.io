@@ -34,7 +34,26 @@
       // Each PWA is identified by its own manifest/start_url/scope.
       try { localStorage.removeItem('rmd_employee_start_url'); } catch (_) {}
 
-      if (isEmployee) {
+      // Android fora do app: em vez de criar atalho do Chrome (que não toca o alarme com o celular bloqueado),
+      // o botão abre esta mesma tela no app RMD Ponto (ou baixa o app, se não estiver instalado).
+      var ua = navigator.userAgent || '';
+      var androidForaDoApp = /android/i.test(ua) && !/; wv\)/.test(ua);
+      if (isEmployee && androidForaDoApp) {
+        window.addEventListener('beforeinstallprompt', function (event) { event.preventDefault(); });
+        window.addEventListener('DOMContentLoaded', function () {
+          if (window.RMDPontoApp) return;
+          var button = document.createElement('button');
+          button.id = 'employee-install-button';
+          button.type = 'button';
+          button.textContent = '📱 Abrir no app RMD Ponto';
+          button.style.cssText = 'position:fixed;right:14px;top:14px;z-index:99999;border:0;border-radius:12px;padding:11px 14px;background:#0d9488;color:#fff;font:800 13px system-ui;box-shadow:0 5px 18px rgba(0,0,0,.22);';
+          button.onclick = function () {
+            var baixar = 'https://cxzzutbijljjteapowuv.supabase.co/functions/v1/atualizacoes?app=ponto&baixar=1';
+            location.href = 'intent://' + location.host + location.pathname + location.search + '#Intent;scheme=https;package=br.com.rmd.ponto;S.browser_fallback_url=' + encodeURIComponent(baixar) + ';end';
+          };
+          document.body.appendChild(button);
+        });
+      } else if (isEmployee) {
         window.__rmdEmployeeInstall = null;
         window.addEventListener('beforeinstallprompt', function (event) {
           event.preventDefault();
@@ -70,7 +89,7 @@
     })();
   </script>
   <title>RMD PontoFace</title>
-  <script type="module" crossorigin src="/assets/index-B70-DcRD.js"></script>
+  <script type="module" crossorigin src="/assets/index-DZHHI8JJ.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-59p1nxCe.css">
 </head>
 <body>
