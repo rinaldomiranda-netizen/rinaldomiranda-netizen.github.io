@@ -98,17 +98,31 @@ const LabVoz = (function () {
   function grafico() {
     const cv = h("canvas", { width: 800, height: 280, style: { width: "100%", "max-width": "800px", background: "#0b1820", "border-radius": "12px", display: "block" } });
     const g = cv.getContext("2d"), JANELA = 8;
+    // escala vertical PARADA (16/11/2026, o Rinaldo viu o gráfico "tremendo" no celular): ela segue as notas-alvo
+    // do exercício (não a voz, que oscila) e, quando precisa mudar, muda devagar.
+    let esc = null, ultAgora = -1;
     function desenhar(st) {
       const W = 800, H = 280, agora = st.agora, t0 = Math.max(0, agora - JANELA);
       g.clearRect(0, 0, W, H);
       const ys = [];
-      st.alvos.forEach((a) => { if (a.t1 >= t0 && a.t0 <= agora + 2) ys.push(a.midi); });
-      st.traco.forEach((p) => { if (p.t >= t0 && p.m != null) ys.push(p.m); });
-      if (st.curva) for (let t = t0; t <= agora + 2; t += 0.25) { const m = st.curva(t); if (m != null) ys.push(m); }
+      st.alvos.forEach((a) => { if (a.t1 >= t0 - 4 && a.t0 <= agora + 6) ys.push(a.midi); });
+      if (st.curva) for (let t = t0; t <= agora + 4; t += 0.25) { const m = st.curva(t); if (m != null) ys.push(m); }
       if (st.curvaPts) st.curvaPts.forEach(([t, m]) => { if (m != null && t >= t0) ys.push(m); });
-      let centro = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : 60;
-      if (st.centro != null) centro = st.centro;
-      const meia = Math.max(7, ys.length ? (Math.max(...ys) - Math.min(...ys)) / 2 + 2 : 7);
+      if (!ys.length) { // sem alvo (afinador livre): usa a voz, mas só o miolo (ignora notas soltas)
+        const vs = st.traco.filter((p) => p.t >= t0 && p.m != null).map((p) => p.m).sort((a, b) => a - b);
+        if (vs.length) ys.push(vs[Math.floor(vs.length * 0.2)], vs[Math.floor(vs.length * 0.8)]);
+      }
+      let alvoC = ys.length ? (Math.max(...ys) + Math.min(...ys)) / 2 : (esc ? esc.centro : 60);
+      if (st.centro != null) alvoC = st.centro;
+      const alvoM = Math.max(7, ys.length ? (Math.max(...ys) - Math.min(...ys)) / 2 + 3 : 7);
+      if (!esc || agora < ultAgora) esc = { centro: Math.round(alvoC), meia: alvoM }; // começo de um treino novo
+      else {
+        // só anda quando a diferença vale a pena (mais de 1 semitom), e anda devagar
+        if (Math.abs(alvoC - esc.centro) > 1) esc.centro += (alvoC - esc.centro) * 0.06;
+        if (Math.abs(alvoM - esc.meia) > 1) esc.meia += (alvoM - esc.meia) * 0.06;
+      }
+      ultAgora = agora;
+      const centro = esc.centro, meia = esc.meia;
       const yDe = (m) => H / 2 - (m - centro) / meia * (H / 2 - 18), xDe = (t) => (t - t0) / (JANELA + 2) * (W - 60) + 50;
       // linhas das notas
       g.font = "12px Segoe UI, Arial"; g.textAlign = "right";
@@ -202,7 +216,7 @@ const LabVoz = (function () {
     // guarda a nota do treino na pasta do aluno (no celular do aluno: sozinho; no computador: o professor escolhe o aluno)
     const guardar = (treino, nota, detalhe) => (typeof TreinosAL !== "undefined" ? TreinosAL.caixa("voz", treino + " · voz " + V().nome.toLowerCase(), nota, detalhe) : null);
     const graf = grafico();
-    const notaGrande = h("div", { class: "nota", style: { "min-width": "7rem" } }, "—"), dica = h("div", { class: "mudo" }, "");
+    const notaGrande = h("div", { class: "nota", style: { "min-width": "7.5rem", "white-space": "nowrap", flex: "none" } }, "—"), dica = h("div", { class: "mudo", style: { "min-height": "2.8em", "line-height": "1.4em", flex: "1", overflow: "hidden" } }, "");
     const resultado = h("div", {});
     const corpo = h("div", {});
     const status = h("p", { class: "mudo", style: { margin: ".3rem 0" } }, "Microfone desligado. Ele liga sozinho quando você começa um treino com microfone.");
@@ -489,7 +503,7 @@ const LabVoz = (function () {
     // área da medição (nota grande, gráfico, aviso do microfone e resultado): fica logo embaixo do exercício tocado
     // (pedido do Rinaldo, 16/11/2026: no Aquecimento o gráfico ficava lá no fim, depois de todos os exercícios)
     const areaMedida = h("div", { class: "area-medida" },
-      h("div", { style: { display: "flex", gap: "1rem", "align-items": "center", margin: ".6rem 0 .2rem", "flex-wrap": "wrap" } }, notaGrande, dica),
+      h("div", { style: { display: "flex", gap: "1rem", "align-items": "center", margin: ".6rem 0 .2rem", "min-height": "4.6rem" } }, notaGrande, dica),
       graf.cv, status, resultado);
     corpo.addEventListener("click", (e) => {
       const b = e.target.closest("button"); if (!b || !corpo.contains(b)) return;
