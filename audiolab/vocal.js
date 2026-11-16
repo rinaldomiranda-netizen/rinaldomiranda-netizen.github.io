@@ -391,7 +391,7 @@ const LabVoz = (function () {
     const MELODIAS = [["Escala subindo e descendo", [0, 1, 2, 3, 4, 3, 2, 1, 0]], ["Passos e saltos", [0, 2, 1, 3, 2, 4, 3, 1, 0]],
       ["Descendo do Sol", [4, 3, 2, 1, 2, 3, 1, 0]], ["Arpejo e volta", [0, 2, 4, 2, 3, 1, 0]]];
     const grau = (base, g) => base + 12 * Math.floor(g / 7) + MAIOR[((g % 7) + 7) % 7];
-    function segundaVoz(melIdx, acima, guia, lento, comMicrofone) {
+    function segundaVoz(melIdx, acima, guia, lento, comMicrofone, fone) {
       const nv = nivelDe("segunda");
       if (nv >= 1) guia = false;            // Intermediário e Avançado: sem a 2ª voz de guia
       if (nv >= 2) lento = false;           // Avançado: andamento normal (e mais rápido)
@@ -419,8 +419,21 @@ const LabVoz = (function () {
         mel.forEach((m, i) => piano(m, t0 + i * d, d * 0.95));
         seg.forEach((m, i) => vozSintetica({ t: t0 + t2 + i * d, midi: m, dur: d * 0.95, vogal: "U", vol: 0.7 }));
         mel.forEach((m, i) => piano(m, t0 + t3 + i * d, d * 0.95, 0.9));
-        if (guia) seg.forEach((m, i) => vozSintetica({ t: t0 + t3 + i * d, midi: m, dur: d * 0.95, vogal: "U", vol: 0.22 }));
+        // a guia (2ª voz baixinho) enquanto a pessoa canta só toca com fone: sem fone o microfone ouviria a própria guia e daria nota sem a pessoa cantar
+        if (guia && fone) seg.forEach((m, i) => vozSintetica({ t: t0 + t3 + i * d, midi: m, dur: d * 0.95, vogal: "U", vol: 0.22 }));
       } }, (st) => {
+        // conferência de "vazamento" (16/11/2026, erro achado pelo Rinaldo): nas partes de OUVIR a pessoa fica calada.
+        // Se o microfone "cantou" junto as notas que o celular tocou, ele está ouvindo o alto-falante: a nota não vale.
+        const ouvidas = alvos.filter((a) => a.ouvir && a.t1 < t3 - 0.5).map((a) => notaDaFaixa(st, a, 50, 0.5));
+        const vazou = ouvidas.filter((r) => !r.semVoz && r.ok).length >= Math.max(2, ouvidas.length * 0.3);
+        if (vazou) {
+          AL.limpar(resultado, h("div", { class: "cartao", style: { "border-left": "4px solid #ef6b6b" } },
+            h("h3", {}, "⚠️ O microfone ouviu o som do próprio celular"),
+            h("p", {}, "Enquanto era só para ouvir, o microfone captou as notas que o aparelho tocou. Assim o sistema confunde o som do alto-falante com a sua voz, e a nota não seria verdadeira."),
+            h("p", {}, h("b", {}, "🎧 Coloque fone de ouvido e faça de novo."), " Se já está de fone, fique em silêncio nas partes “Ouça”."),
+            h("p", { class: "mudo" }, "Este treino não foi guardado.")));
+          return;
+        }
         // o alvo é a 2ª voz: se a pessoa cantou a melodia em vez da 2ª voz, conta como erro (e o aviso explica)
         const rs = cantar.map((a, i) => ({ a, r: notaDaFaixa(st, a, tol), mel: mel[i] }));
         const ok = rs.filter((x) => x.r.ok).length, pct = Math.round(ok / rs.length * 100);
@@ -437,19 +450,25 @@ const LabVoz = (function () {
       const mel = h("select", { "aria-label": "Melodia" }, MELODIAS.map(([n], i) => h("option", { value: i }, n)));
       const lado = h("select", { "aria-label": "Onde fica a 2ª voz" }, h("option", { value: "1" }, "Terça ACIMA da melodia"), h("option", { value: "0" }, "Terça ABAIXO da melodia"));
       const guia = h("input", { type: "checkbox", checked: true, style: { width: "auto" } }), lento = h("input", { type: "checkbox", checked: true, style: { width: "auto" } });
-      const ler = () => [Number(mel.value), lado.value === "1", guia.checked, lento.checked];
+      const fone = h("input", { type: "checkbox", style: { width: "1.3rem", height: "1.3rem" } });
+      const ler = () => [Number(mel.value), lado.value === "1", guia.checked, lento.checked, fone.checked];
       AL.limpar(corpo,
         h("p", {}, "Treino de harmonia: o computador toca a melodia e a pessoa canta a 2ª voz, uma terça acima ou abaixo. Primeiro ouve a melodia, depois ouve a 2ª voz sozinha e então canta a 2ª voz junto com a melodia."),
         seletorDe("segunda"),
         h("p", { class: "mudo" }, "Básico: pode usar a 2ª voz de guia e mais devagar. Intermediário: sem guia. Avançado: sem guia, mais rápido e com margem menor."),
         h("div", { class: "linha", style: { gap: ".6rem", "flex-wrap": "wrap", "align-items": "center" } }, h("span", {}, "Melodia:"), mel, lado),
+        h("div", { class: "cartao", style: { "border-left": "4px solid #f2c94c", padding: ".6rem .8rem" } },
+          h("b", {}, "🎧 Use fone de ouvido neste treino."), " O celular toca a melodia enquanto você canta; sem fone, o microfone ouve o alto-falante e confunde com a sua voz.",
+          h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center", "margin-top": ".4rem" } }, fone, h("b", {}, "Estou de fone de ouvido"))),
         h("div", { class: "linha", style: { gap: "1rem", "flex-wrap": "wrap", margin: ".4rem 0" } },
-          h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center" } }, guia, "Fácil: a 2ª voz toca baixinho de guia"),
+          h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center" } }, guia, "Fácil: a 2ª voz toca baixinho de guia (só com fone)"),
           h("label", { style: { display: "flex", gap: ".4rem", "align-items": "center" } }, lento, "Mais devagar")),
         h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap" } },
           h("button", { onclick: () => { const [a, b, , d] = ler(); segundaVoz(a, b, false, d, false); } }, "▶ Ouvir as duas vozes juntas"),
-          h("button", { class: "primario", onclick: () => { const [a, b, c, d] = ler(); comMic(() => segundaVoz(a, b, c, d, true)); } }, "🎙 Cantar a 2ª voz com o microfone")),
-        h("p", { class: "mudo" }, "Dica: com fone de ouvido o resultado fica bem mais certo, porque o microfone não escuta o piano."));
+          h("button", { class: "primario", onclick: () => { const [a, b, c, d, f] = ler();
+            if (!f && !confirm("Você não marcou “Estou de fone de ouvido”.\n\nSem fone, o microfone pode ouvir o som do celular e a nota não vale. Continuar mesmo assim?")) return;
+            comMic(() => segundaVoz(a, b, c, d, true, f)); } }, "🎙 Cantar a 2ª voz com o microfone")),
+        h("p", { class: "mudo" }, "Sem fone, a guia não toca enquanto você canta, e o sistema confere se o microfone está ouvindo o alto-falante."));
     }
 
     const ABAS = [["afinacao", "🎯 Afinação", telaAfinacao], ["segunda", "🎶 Segunda voz", telaSegundaVoz], ["aquecimento", "🔥 Aquecimento", telaAquecimento], ["vogais", "🗣 Vogais e projeção", telaVogais], ["respiracao", "💨 Respiração (sssss)", telaRespiracao]];

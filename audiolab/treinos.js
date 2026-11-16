@@ -36,7 +36,8 @@ const TreinosAL = (() => {
     "ouvido": { turmas: ["som", "voz", "regencia"], familia: "ouvido", nome: "Treino de ouvido", ferramenta: "Treino de ouvido", botao: "▶ Começar o treino" },
   };
   const TURMAS = { som: "🎚️ Operadores de som", voz: "🎤 Vozes (cantores)", regencia: "🎼 Regência" };
-  function nivel(f) { return Math.min(escolhido[f] != null ? escolhido[f] : maxNivel(f), maxNivel(f)); }
+  // começa no Básico na aula; em casa começa no nível mais alto já liberado
+  function nivel(f) { return Math.min(escolhido[f] != null ? escolhido[f] : liberados ? maxNivel(f) : 0, maxNivel(f)); }
   const rotulo = (f) => " · " + NIVEIS[nivel(f)];
   /** Caixa "Nível" para pôr em cima de um treino. aoMudar(novoIndice) é opcional. */
   function seletorNivel(f, aoMudar) {
