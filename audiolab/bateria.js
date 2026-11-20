@@ -169,8 +169,48 @@ const BateriaAL = (function () {
   const PECAS = [["prato", "Prato"], ["chimbal", "Chimbal"], ["caixa", "Caixa"], ["bumbo", "Bumbo"]];
   const COR = { prato: "#f2c94c", chimbal: "#49c7ef", caixa: "#ff8a65", bumbo: "#7fd18b" };
 
+  // partitura do ritmo (20/11/2026) com o VexFlow (licença MIT, static/vendor/vexflow): só carrega quando pedem.
+  // Bumbo no espaço de baixo, caixa no 3º espaço, chimbal e prato com cabeça em "x" em cima (escrita comum de bateria).
+  const NOTA_PECA = { prato: "a/5/x2", chimbal: "g/5/x2", caixa: "c/5", bumbo: "f/4" };
+  async function desenharPartitura(caixa, r, grade) {
+    const carregar = typeof MusicosAL !== "undefined" ? MusicosAL.carregarScript : (src) => new Promise((ok, erro) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = erro; document.head.append(s); });
+    await carregar("vendor/vexflow/vexflow.js");
+    const VF = window.VexFlow;
+    const passos = r.tempos * r.ppt, oitavas = r.ppt === 3;   // ppt 3 = colcheias em 6/8 ou 12/8
+    const compasso = oitavas ? (r.tempos * 3) + "/8" : r.tempos + "/4";
+    const DUR = oitavas ? { 1: "8", 2: "q", 3: "qd" } : { 1: "16", 2: "8", 3: "8d", 4: "q" };
+    const notas = [];
+    for (let t = 0; t < r.tempos; t++) {
+      let s = t * r.ppt; const fimTempo = s + r.ppt;
+      while (s < fimTempo) {
+        const pecas = PECAS.map(([id]) => id).filter((id) => grade[id][s] !== ".");
+        let tam = 1; while (s + tam < fimTempo && !PECAS.some(([id]) => grade[id][s + tam] !== ".")) tam++;
+        const dur = DUR[tam] || DUR[1];
+        const n = new VF.StaveNote({ keys: pecas.length ? pecas.map((id) => NOTA_PECA[id]) : ["b/4"], duration: dur + (pecas.length ? "" : "r"), clef: "percussion", autoStem: false, stemDirection: 1 });
+        if (dur.endsWith("d")) VF.Dot.buildAndAttach([n], { all: true });
+        notas.push(n); s += tam;
+      }
+    }
+    caixa.innerHTML = "";
+    const largura = Math.max(320, Math.min(900, caixa.clientWidth || 600));
+    const rend = new VF.Renderer(caixa, VF.Renderer.Backends.SVG); rend.resize(largura, 165);
+    const g = rend.getContext(); g.setFillStyle("#111"); g.setStrokeStyle("#111");
+    const pauta = new VF.Stave(8, 38, largura - 16); pauta.addClef("percussion").addTimeSignature(compasso).setContext(g).draw();
+    const vigas = VF.Beam.generateBeams(notas, Object.assign({ stemDirection: VF.Stem.UP, maintainStemDirections: false }, oitavas ? { groups: [new VF.Fraction(3, 8)] } : {}));
+    VF.Formatter.FormatAndDraw(g, pauta, notas);
+    vigas.forEach((b) => b.setContext(g).draw());
+    const svg = caixa.querySelector("svg"); if (svg) { svg.style.background = "#fff"; svg.style.borderRadius = "10px"; svg.style.maxWidth = "100%"; svg.style.height = "auto"; }
+  }
+
   function telaRitmos(el) {
-    let r = null, grade = {}, mudas = {}, bpm = 80, clique = false;
+    let r = null, grade = {}, mudas = {}, bpm = 80, clique = false, verPartitura = false;
+    const partitura = h("div", { style: { margin: ".4rem 0", overflow: "auto" } });
+    const legenda = h("p", { class: "mudo", style: { display: "none" } }, "Na partitura: bumbo embaixo, caixa no meio, chimbal (x) e prato (x) em cima.");
+    const mostrarPartitura = () => {
+      partitura.style.display = verPartitura ? "" : "none"; legenda.style.display = verPartitura ? "" : "none";
+      if (verPartitura) desenharPartitura(partitura, r, grade).catch((e) => { partitura.textContent = "⚠️ Não consegui desenhar a partitura: " + e.message; });
+    };
+    const botaoPartitura = h("button", { onclick: () => { verPartitura = !verPartitura; botaoPartitura.textContent = verPartitura ? "📄 Esconder a partitura" : "📄 Ver a partitura"; mostrarPartitura(); } }, "📄 Ver a partitura");
     const sel = h("select", { "aria-label": "Ritmo" }, RITMOS.map((x) => h("option", { value: x.id }, x.nome)));
     const num = h("input", { type: "number", min: 40, max: 220, value: 80, "aria-label": "Andamento (BPM)", style: { width: "6rem" } });
     const vol = h("input", { type: "range", min: 0, max: 100, value: 80, "aria-label": "Volume" });
@@ -203,6 +243,7 @@ const BateriaAL = (function () {
         }
       });
       AL.limpar(caixaGrade, tab);
+      if (verPartitura) mostrarPartitura();
       AL.limpar(botoesMudo, PECAS.map(([id, nome]) => h("button", { class: mudas[id] ? "perigo" : "", onclick: () => { mudas[id] = !mudas[id]; desenhar(); } }, (mudas[id] ? "🔇 " : "🔊 ") + nome)));
     }
     let ultimo = -1;
@@ -240,7 +281,7 @@ const BateriaAL = (function () {
       h("div", { class: "linha", style: { gap: ".5rem", "flex-wrap": "wrap", "align-items": "center", margin: ".5rem 0" } },
         h("button", { onclick: () => { num.value = bpm - 5; num.onchange(); } }, "− 5"), num, h("button", { onclick: () => { num.value = bpm + 5; num.onchange(); } }, "+ 5"), h("span", {}, "BPM"), botaoClique),
       h("label", {}, "Volume"), vol,
-      botao, contagem, caixaGrade, h("b", {}, "Calar uma peça (você toca ela):"), botoesMudo, nota));
+      botao, contagem, caixaGrade, botaoPartitura, legenda, partitura, h("b", {}, "Calar uma peça (você toca ela):"), botoesMudo, nota));
     escolher();
     return { parar: () => m.parar() };
   }

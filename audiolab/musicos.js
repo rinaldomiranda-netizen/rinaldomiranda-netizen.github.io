@@ -270,16 +270,103 @@ const MusicosAL = (function () {
     return { parar: () => {} };
   }
 
+  // ---------------------------------------------------------------- 4) louvor gravado (20/11/2026)
+  // Usa o Basic Pitch (Spotify, licença Apache-2.0, em static/vendor/basic-pitch): transforma o áudio em notas.
+  // Com as notas, o AudioLab calcula o tom e uma sugestão de acordes a cada trecho. Tudo roda no próprio aparelho.
+  const carregados = {};
+  function carregarScript(src) {
+    if (!carregados[src]) carregados[src] = new Promise((ok, erro) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => { delete carregados[src]; erro(new Error("Não consegui carregar " + src + ". Precisa de internet na primeira vez.")); }; document.head.append(s); });
+    return carregados[src];
+  }
+  const TRIADES = []; for (let r = 0; r < 12; r++) TRIADES.push({ r, menor: false, tons: [r, (r + 4) % 12, (r + 7) % 12] }, { r, menor: true, tons: [r, (r + 3) % 12, (r + 7) % 12] });
+  /** notas = [{inicio, dur, midi, amp}] → { tom, acordes: [{ini, fim, cifra}] } */
+  function analisarNotas(notas, duracao) {
+    const hist = new Array(12).fill(0);
+    notas.forEach((n) => (hist[pc(n.midi)] += n.dur * (0.5 + n.amp)));
+    const tom = descobrirTom(hist)[0], bemol = usaBemol(tom.raiz, tom.menor);
+    const diat = new Set(campo(tom.raiz, tom.menor).map((x) => x.cifra.replace("°", "")));
+    const JAN = 1.0, janelas = [];
+    for (let t = 0; t < duracao; t += JAN) {
+      const cr = new Array(12).fill(0); let baixo = null, energia = 0;
+      notas.forEach((n) => { const sob = Math.min(t + JAN, n.inicio + n.dur) - Math.max(t, n.inicio); if (sob <= 0) return; const peso = sob * (0.5 + n.amp) * (n.midi < 52 ? 2 : 1); cr[pc(n.midi)] += peso; energia += peso; if (baixo == null || n.midi < baixo) baixo = n.midi; });
+      if (energia < 0.15) { janelas.push(null); continue; }
+      const norma = Math.sqrt(cr.reduce((s, x) => s + x * x, 0));
+      let mel = null, melNota = -1;
+      TRIADES.forEach((tr) => {
+        const cif = nomeCif(tr.r, bemol) + (tr.menor ? "m" : "");
+        let sc = tr.tons.reduce((s, p) => s + cr[p], 0) / (norma * Math.sqrt(3));
+        if (diat.has(cif)) sc += 0.08;
+        if (baixo != null && pc(baixo) === tr.r) sc += 0.05;
+        if (sc > melNota) { melNota = sc; mel = cif; }
+      });
+      janelas.push(mel);
+    }
+    // junta trechos iguais e tira trocas muito curtas (menos de 2 s viram o acorde de antes)
+    const acordes = [];
+    janelas.forEach((c, i) => { const ult = acordes[acordes.length - 1]; if (ult && ult.cifra === c) ult.fim = (i + 1) * JAN; else acordes.push({ ini: i * JAN, fim: (i + 1) * JAN, cifra: c }); });
+    for (let k = 1; k < acordes.length; k++) if (acordes[k].fim - acordes[k].ini < 2 && acordes[k - 1].cifra) { acordes[k - 1].fim = acordes[k].fim; acordes.splice(k, 1); k--; if (k > 0 && acordes[k + 1] && acordes[k + 1].cifra === acordes[k].cifra) { acordes[k].fim = acordes[k + 1].fim; acordes.splice(k + 1, 1); } }
+    const limpos = acordes.filter((a) => a.cifra);
+    // sequência que mais se repete (4 acordes seguidos)
+    const conta = {}; for (let i = 0; i + 3 < limpos.length; i++) { const k = limpos.slice(i, i + 4).map((a) => a.cifra).join(" – "); conta[k] = (conta[k] || 0) + 1; }
+    const principal = Object.entries(conta).sort((a, b) => b[1] - a[1])[0];
+    return { tom, acordes: limpos, principal: principal && principal[1] > 1 ? principal[0] : null };
+  }
+  const mmss = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+  function telaGravado(el) {
+    const arquivo = h("input", { type: "file", accept: "audio/*", "aria-label": "Louvor gravado" });
+    const estado = h("p", { class: "mudo" }, "Escolha um louvor gravado (MP3, M4A, WAV…). Funciona melhor com voz e violão ou teclado; com banda cheia é uma sugestão.");
+    const barra = h("progress", { max: 100, value: 0, style: { width: "100%", display: "none" } });
+    const resultado = h("div");
+    let ocupado = false;
+    async function analisar() {
+      const f = arquivo.files && arquivo.files[0]; if (!f || ocupado) return;
+      ocupado = true; AL.limpar(resultado); barra.style.display = ""; barra.value = 0;
+      try {
+        estado.textContent = "⏳ Abrindo o áudio…";
+        const c = audio(), bruto = await c.decodeAudioData(await f.arrayBuffer());
+        const dur = Math.min(bruto.duration, 240);
+        const off = new OfflineAudioContext(1, Math.ceil(dur * 22050), 22050), s = off.createBufferSource(); s.buffer = bruto; s.connect(off.destination); s.start();
+        const sinal = await off.startRendering();
+        estado.textContent = "⏳ Carregando a inteligência que ouve as notas (só na primeira vez demora)…";
+        await carregarScript("vendor/basic-pitch/basic-pitch.js");
+        const B = window.BasicPitchAL, bp = new B.BasicPitch("vendor/basic-pitch/model/model.json");
+        const frames = [], onsets = [], contornos = [];
+        estado.textContent = "🎧 Ouvindo o louvor… (" + mmss(dur) + (bruto.duration > 240 ? ", só os 4 primeiros minutos" : "") + ")";
+        await bp.evaluateModel(sinal, (fr, on, co) => { frames.push(...fr); onsets.push(...on); contornos.push(...co); }, (p) => { barra.value = Math.round(p * 100); });
+        const ev = B.noteFramesToTime(B.addPitchBendsToNoteEvents(contornos, B.outputToNotesPoly(frames, onsets, 0.25, 0.25, 5)));
+        const notas = ev.map((n) => ({ inicio: n.startTimeSeconds, dur: n.durationSeconds, midi: n.pitchMidi, amp: n.amplitude || 0.5 }));
+        if (notas.length < 10) throw new Error("Não achei notas suficientes nesse áudio.");
+        const r = analisarNotas(notas, dur);
+        estado.textContent = "✅ Pronto: " + notas.length + " notas encontradas.";
+        const ac = campo(r.tom.raiz, r.tom.menor);
+        AL.limpar(resultado,
+          h("div", { class: "cartao" }, h("h2", {}, "🎼 Tom provável: " + nomeTom(r.tom.raiz, r.tom.menor)),
+            h("p", {}, "Acordes do tom: ", ac.filter((x) => !x.grau.includes("°")).map((x) => x.cifra).join(" · ")),
+            r.principal ? h("p", {}, h("b", {}, "Sequência que mais se repete: "), r.principal) : null),
+          h("div", { class: "cartao" }, h("h2", {}, "⏱ Acordes ao longo do louvor (sugestão)"),
+            h("div", { class: "linha", style: { gap: ".35rem", "flex-wrap": "wrap" } }, r.acordes.map((a) => h("span", { style: { padding: ".35rem .6rem", "border-radius": "10px", background: "#0e5a4f", border: "1px solid #f2c94c", "font-weight": "700" } }, mmss(a.ini) + " " + a.cifra))),
+            h("p", { class: "mudo" }, "É uma sugestão automática: confira de ouvido. Em “Tom e acordes” dá para ouvir cada acorde e trocar o tom.")));
+      } catch (e) { estado.textContent = "⚠️ " + e.message; }
+      finally { ocupado = false; barra.style.display = "none"; }
+    }
+    arquivo.onchange = analisar;
+    AL.limpar(el, h("div", { class: "cartao" }, h("h2", {}, "🎧 Louvor gravado"),
+      h("p", {}, "O sistema ouve um louvor gravado e mostra o tom e os acordes de cada trecho, para o músico tirar a música."),
+      arquivo, estado, barra, resultado,
+      h("p", { class: "mudo" }, "O áudio é analisado neste aparelho e não é enviado para lugar nenhum. Usa a tecnologia aberta Basic Pitch (Spotify).")));
+    return { parar: () => {} };
+  }
+
   // ---------------------------------------------------------------- painel
   function painel(el) {
     let atual = null;
     const area = h("div");
-    const abas = [["Nota do cantor", telaNota], ["Tom e acordes", telaTom], ["Percepção", telaPercepcao]];
+    const abas = [["Nota do cantor", telaNota], ["Tom e acordes", telaTom], ["Louvor gravado", telaGravado], ["Percepção", telaPercepcao]];
     const botoes = abas.map(([nome, fn]) => h("button", { onclick: (e) => { if (atual) atual.parar(); botoes.forEach((b) => b.classList.remove("ligado")); e.currentTarget.classList.add("ligado"); atual = fn(area); } }, nome));
     AL.limpar(el, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".6rem" } }, botoes), area);
     botoes[0].click();
     return { parar: () => { if (atual) atual.parar(); } };
   }
 
-  return { painel, _descobrirTom: descobrirTom, _campo: campo, _transporLinha: transporLinha };
+  return { painel, _descobrirTom: descobrirTom, _campo: campo, _transporLinha: transporLinha, _analisarNotas: analisarNotas, carregarScript };
 })();
