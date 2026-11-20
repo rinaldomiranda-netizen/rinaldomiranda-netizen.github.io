@@ -258,7 +258,7 @@
     function trocar(id) {
       barra.querySelectorAll("button").forEach((b) => b.classList.toggle("ligado", b.dataset.aba === id));
       abas.forEach(([x, , el]) => el.classList.toggle("oculto", x !== id));
-      if (id === "notas") carregarNotas(); else if (id === "treino" && !corpoTreino.childElementCount) FerramentasAL.montar(corpoTreino, { semTelao: true, itens: ["labvoz", "ouvido", "camera", "metronomo"] });
+      if (id === "notas") carregarNotas(); else if (id === "treino" && !corpoTreino.childElementCount) FerramentasAL.montar(corpoTreino, { semTelao: true, itens: ["labvoz", "ouvido", "camera", "metronomo", "bateria"] });
       if (id !== "treino") FerramentasAL.parar();
     }
     irPara = (id) => { trocar(id); barra.scrollIntoView({ behavior: "smooth" }); };
