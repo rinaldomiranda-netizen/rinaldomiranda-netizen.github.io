@@ -137,7 +137,7 @@ const MusicosAL = (function () {
     if (!window.isSecureContext || !navigator.mediaDevices) throw new Error("O microfone só funciona no endereço seguro. No celular, use o botão “Abrir com microfone (endereço seguro)” das Ferramentas.");
     if (typeof LabVoz === "undefined" || !LabVoz._detectar) throw new Error("Detector de nota indisponível.");
     const c = audio();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const stream = await AL.microfone({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     const src = c.createMediaStreamSource(stream), proc = c.createScriptProcessor(2048, 1, 1), mudo = c.createGain(); mudo.gain.value = 0;
     src.connect(proc); proc.connect(mudo).connect(c.destination);
     proc.onaudioprocess = (e) => {

@@ -72,10 +72,20 @@
             : ir ? h("button", { style: { "margin-top": ".3rem" }, onclick: () => abrirTreino(ir) }, "▶ Treinar isto agora") : null);
       })));
   }
-  let abrirTreino = () => {};
+  let abrirTreino = () => {}, refazerTreino = () => {};
+  // tipo de acesso (20/11/2026): o professor marca cantor, regente, operador, baterista e/ou músico; o app mostra só esses treinos.
+  // Sem nenhum tipo marcado (acessos antigos): mostra tudo.
+  const ORDEM_FERR = ["labvoz", "ouvido", "camera", "metronomo", "bateria", "musicos"];
+  const POR_TIPO = { voz: ["labvoz", "ouvido"], regencia: ["camera", "metronomo", "ouvido"], som: ["ouvido"], bateria: ["bateria", "metronomo"], musico: ["musicos", "ouvido", "metronomo"] };
+  function ferramentasDoAluno() {
+    const ts = (resumo.turmas && resumo.turmas.length ? resumo.turmas : (conta && conta.turmas)) || [];
+    if (!ts.length) return ORDEM_FERR;
+    const s = new Set(); ts.forEach((t) => (POR_TIPO[t] || []).forEach((x) => s.add(x)));
+    return s.size ? ORDEM_FERR.filter((x) => s.has(x)) : ORDEM_FERR;
+  }
   async function atualizarResumo() {
     if (!conta) return;
-    try { const d = await nuvem({ acao: "aluno_resumo", codigo: conta.codigo }); resumo = { pendencias: d.pendencias || [], itens: d.itens || [], documentos: d.documentos || [], info: d.info || {}, dias: d.dias || [] }; gravar("al_casa_resumo", resumo); } catch (e) { if (e.status === 403) { sair("O seu código mudou ou foi desativado. Peça o código novo ao professor."); return; } /* sem internet: usa o guardado */ }
+    try { const d = await nuvem({ acao: "aluno_resumo", codigo: conta.codigo }); const tiposAntes = (resumo.turmas || []).join(); resumo = { pendencias: d.pendencias || [], itens: d.itens || [], documentos: d.documentos || [], info: d.info || {}, dias: d.dias || [], turmas: d.turmas || [] }; if (tiposAntes !== resumo.turmas.join()) refazerTreino(); gravar("al_casa_resumo", resumo); } catch (e) { if (e.status === 403) { sair("O seu código mudou ou foi desativado. Peça o código novo ao professor."); return; } /* sem internet: usa o guardado */ }
     aplicarResumo();
   }
 
@@ -234,7 +244,7 @@
       msg ? h("p", { class: "erro" }, msg) : null,
       h("form", { onsubmit: async (e) => {
         e.preventDefault(); botao.disabled = true;
-        try { const r = await nuvem({ acao: "aluno_entrar", codigo: cod.value }); conta = { codigo: cod.value.toUpperCase().trim(), nome: r.nome }; gravar("al_casa_conta", conta); montar(); }
+        try { const r = await nuvem({ acao: "aluno_entrar", codigo: cod.value }); conta = { codigo: cod.value.toUpperCase().trim(), nome: r.nome, turmas: r.turmas || [] }; gravar("al_casa_conta", conta); montar(); }
         catch (er) { AL.toast(er.rede ? "Sem internet agora. Para entrar a primeira vez precisa de internet." : er.message, true); botao.disabled = false; }
       } }, h("label", {}, "Código do aluno"), cod, botao)));
     if (!codigoInicial) cod.focus();
@@ -258,10 +268,12 @@
     function trocar(id) {
       barra.querySelectorAll("button").forEach((b) => b.classList.toggle("ligado", b.dataset.aba === id));
       abas.forEach(([x, , el]) => el.classList.toggle("oculto", x !== id));
-      if (id === "notas") carregarNotas(); else if (id === "treino" && !corpoTreino.childElementCount) FerramentasAL.montar(corpoTreino, { semTelao: true, itens: ["labvoz", "ouvido", "camera", "metronomo", "bateria", "musicos"] });
+      if (id === "notas") carregarNotas(); else if (id === "treino" && !corpoTreino.childElementCount) FerramentasAL.montar(corpoTreino, { semTelao: true, itens: ferramentasDoAluno() });
       if (id !== "treino") FerramentasAL.parar();
     }
     irPara = (id) => { trocar(id); barra.scrollIntoView({ behavior: "smooth" }); };
+    // o professor mudou o tipo de acesso: monta de novo a lista de treinos
+    refazerTreino = () => { if (!corpoTreino.childElementCount) return; FerramentasAL.parar(); AL.limpar(corpoTreino); if (!corpoTreino.classList.contains("oculto")) trocar("treino"); };
     abrirTreino = ([fer, aba]) => {
       trocar("treino");
       const b = [...corpoTreino.querySelectorAll("button")].find((x) => x.textContent === fer); if (b) b.click();
@@ -303,7 +315,7 @@
     cab("Treino em casa");
     AL.limpar(app, h("p", { class: "mudo" }, "Entrando…"));
     nuvem({ acao: "aluno_entrar", codigo: codigoLink })
-      .then((r) => { conta = { codigo: codigoLink, nome: r.nome }; gravar("al_casa_conta", conta); montar(); })
+      .then((r) => { conta = { codigo: codigoLink, nome: r.nome, turmas: r.turmas || [] }; gravar("al_casa_conta", conta); montar(); })
       .catch((e) => telaEntrar(e.rede ? "Sem internet agora. Conecte e tente de novo." : e.message, codigoLink));
     return;
   }

@@ -86,7 +86,7 @@ const FerramentasAL = (() => {
       e.semSeguro = true; throw e;
     }
     const c = audio();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const stream = await AL.microfone({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     const src = c.createMediaStreamSource(stream); const an = c.createAnalyser(); an.fftSize = 8192; an.smoothingTimeConstant = 0.8; src.connect(an);
     return { an, parar: () => stream.getTracks().forEach((t) => t.stop()) };
   }
@@ -318,9 +318,9 @@ const FerramentasAL = (() => {
     }
     async function ligar() {
       FerramentasAL.parar();
-      if (!window.isSecureContext || !navigator.mediaDevices) { AL.toast("A câmera só funciona no endereço seguro (no celular, use o botão “Abrir com microfone (endereço seguro)” no alto).", true); return; }
-      try { stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false }); }
-      catch (e) { AL.toast("O navegador não liberou a câmera. Permita a câmera e tente de novo.", true); return; }
+      // 20/11/2026: a câmera pede permissão explicando e, se estiver bloqueada, mostra como liberar (AL.camera, comum.js)
+      try { stream = await AL.camera({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false }); }
+      catch (e) { AL.toast(e.message, true); status.textContent = "📷 " + e.message; return; }
       video.srcObject = stream; try { await video.play(); } catch (e) { /* ok */ }
       ativo = { parar: pararTudo };
       status.textContent = "📷 Câmera ligada. Faça um gesto de regência para testar: o ponto amarelo segue a mão e cada ictus vira um círculo.";

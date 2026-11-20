@@ -33,13 +33,16 @@ const TreinosAL = (() => {
     "vogais": { turmas: ["voz"], familia: "vogais", nome: "Vogais · nota longa", ferramenta: "Laboratório da voz", aba: "🗣 Vogais e projeção", botao: null, semNivel: true },
     "respiracao": { turmas: ["voz"], familia: "respiracao", nome: "Respiração · sssss", ferramenta: "Laboratório da voz", aba: "💨 Respiração (sssss)", botao: "🎙 Começar o Sssss", semNivel: true },
     "regencia": { turmas: ["regencia"], familia: "regencia", nome: "Regência com câmera", ferramenta: "Regência com câmera", botao: "📷 Ligar a câmera", regencia: true },
-    "ouvido": { turmas: ["som", "voz", "regencia", "bateria"], familia: "ouvido", nome: "Treino de ouvido", ferramenta: "Treino de ouvido", botao: "▶ Começar o treino" },
+    "ouvido": { turmas: ["som", "voz", "regencia", "bateria", "musico"], familia: "ouvido", nome: "Treino de ouvido", ferramenta: "Treino de ouvido", botao: "▶ Começar o treino" },
     // 20/11/2026: bateristas (static/bateria.js)
     "bateria:tempo": { turmas: ["bateria"], familia: "bateria", nome: "Bateria · Tocar no tempo", ferramenta: "🥁 Bateria", aba: "Exercícios com nota", botao: "🎯 Tocar no tempo" },
     "bateria:rudimento": { turmas: ["bateria"], familia: "bateria", nome: "Bateria · Rudimentos", ferramenta: "🥁 Bateria", aba: "Exercícios com nota", botao: "🥢 Rudimentos" },
+    // 20/11/2026: músicos (violão, teclado, contrabaixo) — static/musicos.js
+    "musico:nota": { turmas: ["musico"], familia: "musico", nome: "Músicos · Que nota é essa?", ferramenta: "🎸 Músicos", aba: "Percepção", botao: "🎹 Que nota é essa?" },
+    "musico:acorde": { turmas: ["musico"], familia: "musico", nome: "Músicos · Maior ou menor?", ferramenta: "🎸 Músicos", aba: "Percepção", botao: "🎶 Maior ou menor?" },
     "bateria:segurar": { turmas: ["bateria"], familia: "bateria", nome: "Bateria · Segure o tempo", ferramenta: "🥁 Bateria", aba: "Exercícios com nota", botao: "🔇 Segure o tempo" },
   };
-  const TURMAS = { som: "🎚️ Operadores de som", voz: "🎤 Vozes (cantores)", regencia: "🎼 Regência", bateria: "🥁 Bateristas" };
+  const TURMAS = { som: "🎚️ Operadores de som", voz: "🎤 Vozes (cantores)", regencia: "🎼 Regência", bateria: "🥁 Bateristas", musico: "🎸 Músicos" };
   // começa no Básico na aula; em casa começa no nível mais alto já liberado
   function nivel(f) { return Math.min(escolhido[f] != null ? escolhido[f] : liberados ? maxNivel(f) : 0, maxNivel(f)); }
   const rotulo = (f) => " · " + NIVEIS[nivel(f)];

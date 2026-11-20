@@ -36,7 +36,68 @@ const AL = {
     document.body.append(t); setTimeout(() => t.remove(), 3200);
   },
   tema(t) { document.documentElement.dataset.tema = ["claro", "medio", "escuro"].includes(t) ? t : "escuro"; },
-  cabecalho(el, info, subtitulo, direita) {
+  // ---------- microfone e câmera (20/11/2026, pedido do Rinaldo: no celular aparecia "sem permissão" / "acesso negado"
+  // e ninguém sabia o que fazer). Antes de pedir, explica que o celular vai perguntar e que é para tocar em PERMITIR.
+  // Se estiver bloqueado, abre a ajuda com o passo a passo para liberar (Chrome, ícone instalado, iPhone).
+  // Todas as ferramentas pedem o microfone (AL.microfone) e a câmera (AL.camera) por aqui.
+  MIDIA: {
+    microfone: { perm: "microphone", nome: "microfone", Nome: "Microfone", icone: "🎤", uso: "ouvir você", padrao: { audio: true }, privacidade: "O som é usado só ao vivo, neste aparelho: nada é gravado nem enviado." },
+    camera: { perm: "camera", nome: "câmera", Nome: "Câmera", icone: "📷", uso: "ver o seu gesto", padrao: { video: true }, privacidade: "A imagem é usada só ao vivo, neste aparelho: nada é gravado nem enviado." },
+  },
+  microfone(restricoes) { return AL._pedirMidia("microfone", restricoes); },
+  camera(restricoes) { return AL._pedirMidia("camera", restricoes); },
+  async _pedirMidia(tipo, restricoes) {
+    const M = AL.MIDIA[tipo];
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      throw new Error("A " + (tipo === "camera" ? "câmera" : "o microfone").replace("A o", "O") + " só funciona no endereço seguro. No celular da aula, use o botão “Abrir com microfone (endereço seguro)” das Ferramentas.");
+    let estado = "prompt";
+    try { estado = (await navigator.permissions.query({ name: M.perm })).state; } catch (e) { /* o navegador não informa: tenta pedir */ }
+    if (estado === "denied") { AL.ajudaPermissao(tipo); throw new Error("A permissão de " + M.nome + " está bloqueada neste aparelho. Veja na caixa como liberar."); }
+    AL._explicado = AL._explicado || {};
+    if (estado === "prompt" && !AL._explicado[tipo]) { await AL._avisoPermissao(tipo); AL._explicado[tipo] = true; }
+    try { return await navigator.mediaDevices.getUserMedia(restricoes || M.padrao); }
+    catch (e) {
+      if (e.name === "NotAllowedError" || e.name === "SecurityError") { AL.ajudaPermissao(tipo); throw new Error("Sem permissão de " + M.nome + ". Veja na caixa como liberar e tente de novo."); }
+      if (e.name === "NotFoundError" || e.name === "OverconstrainedError") throw new Error("Não achei " + M.nome + " neste aparelho.");
+      if (e.name === "NotReadableError" || e.name === "AbortError") throw new Error("A " + M.nome + " está sendo usada por outro aplicativo (ligação, gravador, WhatsApp, outra aba…). Feche e tente de novo.");
+      throw new Error("Não consegui ligar " + (tipo === "camera" ? "a câmera" : "o microfone") + ": " + e.message);
+    }
+  },
+  _janela(titulo, ...conteudo) {
+    const fundo = AL.h("div", { role: "dialog", "aria-modal": "true", style: { position: "fixed", inset: "0", "z-index": "200", background: "rgba(0,0,0,.65)", display: "flex", "align-items": "center", "justify-content": "center", padding: "1rem" } });
+    const caixa = AL.h("div", { class: "cartao", style: { "max-width": "440px", width: "100%", "max-height": "90vh", overflow: "auto", margin: "0" } }, AL.h("h2", {}, titulo), conteudo);
+    fundo.append(caixa); document.body.append(fundo);
+    return fundo;
+  },
+  _avisoPermissao(tipo) {
+    const M = AL.MIDIA[tipo];
+    return new Promise((ok) => {
+      const j = AL._janela(M.icone + " Vamos ligar " + (tipo === "camera" ? "a câmera" : "o microfone"),
+        AL.h("p", {}, "O celular vai perguntar se o AudioLab pode usar " + (tipo === "camera" ? "a câmera" : "o microfone") + "."),
+        AL.h("p", {}, AL.h("b", {}, "Toque em “Permitir”"), " (ou “Ao usar o app”)."),
+        AL.h("p", { class: "mudo" }, M.privacidade),
+        AL.h("button", { class: "primario bloco", onclick: () => { j.remove(); ok(); } }, "Entendi, pedir permissão"));
+    });
+  },
+  ajudaMicrofone() { AL.ajudaPermissao("microfone"); },
+  ajudaPermissao(tipo) {
+    const M = AL.MIDIA[tipo];
+    if (document.querySelector("[data-ajuda-perm]")) return;
+    const ua = navigator.userAgent, iphone = /iPhone|iPad|iPod/i.test(ua), instalado = window.matchMedia && matchMedia("(display-mode: standalone)").matches;
+    const passos = iphone
+      ? ["Abra os Ajustes do iPhone.", "Toque em Safari (ou no app que você usa) › " + M.Nome + ".", "Escolha “Permitir”.", "Volte aqui e toque em “Tentar de novo”."]
+      : instalado
+        ? ["Abra as Configurações do celular.", "Toque em Apps (ou Aplicativos) › Chrome.", "Toque em Permissões › " + M.Nome + " › “Permitir”.", "Volte aqui e toque em “Tentar de novo”."]
+        : ["Toque no cadeado 🔒 (ou no ícone ⓘ / ⚙) ao lado do endereço, lá em cima.", "Toque em Permissões (ou Configurações do site) › " + M.Nome + ".", "Escolha “Permitir”.", "Toque em “Tentar de novo”."];
+    const j = AL._janela("🚫 " + M.Nome + " sem permissão",
+      AL.h("p", {}, "Para o AudioLab " + M.uso + ", libere " + (tipo === "camera" ? "a câmera" : "o microfone") + " assim:"),
+      AL.h("ol", {}, passos.map((p) => AL.h("li", { style: { margin: ".35rem 0" } }, p))),
+      AL.h("p", { class: "mudo" }, iphone ? "" : "Se não achar: Configurações do celular › Apps › Chrome › Permissões › " + M.Nome + " › Permitir. Se o Chrome também estiver sem permissão no celular, libere lá primeiro."),
+      AL.h("div", { class: "linha", style: { gap: ".5rem", "flex-wrap": "wrap" } },
+        AL.h("button", { class: "primario", onclick: () => location.reload() }, "🔄 Tentar de novo"),
+        AL.h("button", { onclick: () => j.remove() }, "Fechar")));
+    j.setAttribute("data-ajuda-perm", "1");
+  },  cabecalho(el, info, subtitulo, direita) {
     AL.limpar(el, AL.h("div", { class: "logo", "aria-hidden": "true" }, "AL"),
       AL.h("div", { class: "marca" }, AL.h("b", {}, info.nome_empresa || "RMD AudioLab"), AL.h("small", {}, "RMD AudioLab · " + subtitulo)),
       AL.h("div", { class: "direita" }, direita || null));
