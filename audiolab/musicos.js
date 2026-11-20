@@ -20,6 +20,43 @@ const MusicosAL = (function () {
   const nomePT = (p, bemol) => (bemol ? PT_B : PT)[p];
   const freq = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
+  // ---------------------------------------------------------------- forma de LEITURA (20/11/2026, pedido do Rinaldo)
+  // Básico: só os nomes das notas (Dó, Ré, Mi…). Intermediário: cifras (C, D, Em…). Avançado: partitura (com a cifra).
+  // Nem todo mundo lê partitura: ela só aparece no Avançado. A escolha fica guardada no aparelho (vale para Músicos e Bateria).
+  const LEITURAS = ["Básico · Dó, Ré, Mi", "Intermediário · Cifras (C, D, Em)", "Avançado · Partitura"];
+  let leitura = (() => { try { return Math.min(2, Math.max(0, Number(localStorage.getItem("al_leitura")) || 0)); } catch (e) { return 0; } })();
+  function definirLeitura(n) { leitura = n; try { localStorage.setItem("al_leitura", String(n)); } catch (e) { /* ok */ } }
+  const rotNota = (p, bemol) => (leitura === 0 ? nomePT(p, bemol) : nomeCif(p, bemol));
+  // "G" → "Sol maior", "F#m" → "Fá# menor", "Bb" → "Sib maior", "B°" → "Si diminuto"
+  function cifraParaPT(cif) {
+    const m = String(cif).match(/^([A-G])([#b]?)(.*)$/); if (!m) return cif;
+    const idx = (CIF.indexOf(m[1]) + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) + 12) % 12;
+    const tipo = m[3].startsWith("°") ? " diminuto" : m[3].startsWith("m") && !m[3].startsWith("maj") ? " menor" : " maior";
+    return nomePT(idx, m[2] === "b") + tipo;
+  }
+  const rotAcorde = (cif) => (leitura === 0 ? cifraParaPT(cif) : cif);
+  function seletorLeitura(aoMudar) {
+    const sel = h("select", { "aria-label": "Forma de leitura", style: { width: "auto" } }, LEITURAS.map((t, i) => h("option", { value: i }, t)));
+    sel.value = String(leitura);
+    sel.onchange = () => { definirLeitura(Number(sel.value)); if (aoMudar) aoMudar(); };
+    return h("div", { class: "linha", style: { gap: ".5rem", "align-items": "center", "flex-wrap": "wrap", margin: ".2rem 0 .6rem" } }, h("b", {}, "📖 Leitura:"), sel,
+      h("small", { class: "mudo" }, "Escolha como você lê música. A partitura só aparece no Avançado."));
+  }
+  // partitura (só no Avançado) com o VexFlow (MIT, static/vendor/vexflow): uma nota ou um acorde
+  const VF_NOMES = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"], VF_NOMES_B = ["c", "db", "d", "eb", "e", "f", "gb", "g", "ab", "a", "bb", "b"];
+  async function pauta(caixa, midis, bemol) {
+    caixa.textContent = "";
+    await carregarScript("vendor/vexflow/vexflow.js");
+    const VF = window.VexFlow, grave = midis.every((m) => m < 57), nomes = bemol ? VF_NOMES_B : VF_NOMES;
+    const ord = [...midis].sort((a, b) => a - b);
+    const nota = new VF.StaveNote({ keys: ord.map((m) => nomes[pc(m)] + "/" + (Math.floor(Math.round(m) / 12) - 1)), duration: "w", clef: grave ? "bass" : "treble" });
+    ord.forEach((m, i) => { const n = nomes[pc(m)]; if (n.length > 1) nota.addModifier(new VF.Accidental(n[1] === "b" ? "b" : "#"), i); });
+    const rend = new VF.Renderer(caixa, VF.Renderer.Backends.SVG); rend.resize(200, 140);
+    const g = rend.getContext(), st = new VF.Stave(6, 20, 188); st.addClef(grave ? "bass" : "treble").setContext(g).draw();
+    VF.Formatter.FormatAndDraw(g, st, [nota]);
+    const svg = caixa.querySelector("svg"); if (svg) { svg.style.background = "#fff"; svg.style.borderRadius = "10px"; svg.style.display = "block"; svg.style.margin = ".3rem auto"; }
+  }
+
   // ---------------------------------------------------------------- som de piano simples
   function piano(m, t, dur, vol) {
     const c = audio(), g = c.createGain(), f = freq(m);
@@ -34,7 +71,7 @@ const MusicosAL = (function () {
     // 2 oitavas começando no Dó; destaques = conjunto de classes de nota (0..11)
     const brancas = [0, 2, 4, 5, 7, 9, 11], pretas = { 1: 0, 3: 1, 6: 3, 8: 4, 10: 5 };
     const L = 14, W = 22, H = 90; let s = '<svg viewBox="0 0 ' + (L * W) + ' ' + (H + 4) + '" width="100%" style="max-width:520px;display:block;margin:.3rem auto">';
-    for (let o = 0; o < 2; o++) brancas.forEach((p, i) => { const x = (o * 7 + i) * W, on = destaques.has(p); s += '<rect x="' + x + '" y="0" width="' + (W - 1) + '" height="' + H + '" rx="3" fill="' + (on ? (p === raiz ? "#f2c94c" : "#49c7ef") : "#f4f7f8") + '" stroke="#223"/>' + (on ? '<text x="' + (x + W / 2) + '" y="' + (H - 8) + '" font-size="9" text-anchor="middle" font-weight="700" fill="#0b1820">' + CIF[p] + "</text>" : ""); });
+    for (let o = 0; o < 2; o++) brancas.forEach((p, i) => { const x = (o * 7 + i) * W, on = destaques.has(p); s += '<rect x="' + x + '" y="0" width="' + (W - 1) + '" height="' + H + '" rx="3" fill="' + (on ? (p === raiz ? "#f2c94c" : "#49c7ef") : "#f4f7f8") + '" stroke="#223"/>' + (on ? '<text x="' + (x + W / 2) + '" y="' + (H - 8) + '" font-size="9" text-anchor="middle" font-weight="700" fill="#0b1820">' + rotNota(p) + "</text>" : ""); });
     for (let o = 0; o < 2; o++) Object.entries(pretas).forEach(([p, i]) => { p = Number(p); const x = (o * 7 + i) * W + W * 0.68, on = destaques.has(p); s += '<rect x="' + x + '" y="0" width="' + (W * 0.64) + '" height="' + (H * 0.6) + '" rx="2" fill="' + (on ? (p === raiz ? "#f2c94c" : "#49c7ef") : "#1b2328") + '"/>'; });
     return s + "</svg>";
   }
@@ -45,11 +82,11 @@ const MusicosAL = (function () {
     grade.append(h("div"));
     for (let f = 0; f <= casas; f++) grade.append(h("div", { style: { "text-align": "center", color: [3, 5, 7, 9, 12].includes(f) ? "#f2c94c" : "#7d97a1" } }, f === 0 ? "solta" : String(f)));
     cordas.forEach((solta) => {
-      grade.append(h("div", { style: { "font-weight": "700", color: "#9fdcef", "align-self": "center" } }, CIF[pc(solta)]));
+      grade.append(h("div", { style: { "font-weight": "700", color: "#9fdcef", "align-self": "center" } }, rotNota(pc(solta))));
       for (let f = 0; f <= casas; f++) {
         const p = pc(solta + f), on = destaques.has(p);
         grade.append(h("div", { style: { height: "1.35rem", "border-radius": "50%", display: "grid", "place-items": "center", "font-weight": "800", "font-size": ".62rem",
-          background: on ? (p === raiz ? "#f2c94c" : "#49c7ef") : "transparent", color: on ? "#0b1820" : "", "border-bottom": "2px solid #50656e", "border-radius": on ? "50%" : "0" } }, on ? CIF[p] : ""));
+          background: on ? (p === raiz ? "#f2c94c" : "#49c7ef") : "transparent", color: on ? "#0b1820" : "", "border-bottom": "2px solid #50656e", "border-radius": on ? "50%" : "0" } }, on ? rotNota(p) : ""));
       }
     });
     return h("div", { style: { overflow: "auto" } }, grade);
@@ -78,7 +115,8 @@ const MusicosAL = (function () {
       return { grau, cifra: nomeCif(r, b) + tipo, raiz: r, notas, nomes: notas.map((p) => nomePT(p, b)).join(" – ") };
     });
   }
-  const nomeTom = (raiz, menor) => nomePT(raiz, usaBemol(raiz, menor)) + (menor ? " menor" : " maior") + " (" + nomeCif(raiz, usaBemol(raiz, menor)) + (menor ? "m" : "") + ")";
+  // no Básico o tom vai só por extenso ("Sol maior"); do Intermediário em diante, com a cifra ("Sol maior (G)")
+  const nomeTom = (raiz, menor) => nomePT(raiz, usaBemol(raiz, menor)) + (menor ? " menor" : " maior") + (leitura === 0 ? "" : " (" + nomeCif(raiz, usaBemol(raiz, menor)) + (menor ? "m" : "") + ")");
   // trocar o tom de uma cifra: muda só os acordes (palavras como G, D/F#, Em7, Bbsus4), a letra fica igual
   const RX_ACORDE = /^([A-G])([#b]?)([^\s/]*)(\/([A-G])([#b]?))?$/;
   const indice = (l, ac) => (CIF.indexOf(l) + (ac === "#" ? 1 : ac === "b" ? -1 : 0) + 12) % 12;
@@ -114,7 +152,7 @@ const MusicosAL = (function () {
     let mic = null, recentes = [], hist = new Array(12).fill(0), ultimaMostrada = null, instr = "violao";
     const grande = h("div", { style: { "text-align": "center", "font-size": "4rem", "font-weight": "900", "line-height": "1.1", "min-height": "5rem" } }, "—");
     const sub = h("div", { style: { "text-align": "center", color: "#9fdcef", "min-height": "1.4rem" } }, "Ligue o microfone e cante (ou toque) uma nota.");
-    const desenhos = h("div"), tomEl = h("div", { class: "cartao", style: { margin: ".6rem 0" } }, h("b", {}, "🎼 Tom provável: "), "ainda ouvindo…");
+    const desenhos = h("div"), caixaPauta = h("div"), tomEl = h("div", { class: "cartao", style: { margin: ".6rem 0" } }, h("b", {}, "🎼 Tom provável: "), "ainda ouvindo…");
     const selInstr = h("select", { "aria-label": "Instrumento" }, [["violao", "🎸 Violão / guitarra"], ["baixo", "🎸 Contrabaixo"], ["teclado", "🎹 Teclado"]].map(([v, t]) => h("option", { value: v }, t)));
     const botao = h("button", { class: "primario bloco", style: { "font-size": "1.2rem", padding: ".9rem" } }, "🎤 Ligar o microfone");
     function desenhar(p) {
@@ -129,8 +167,8 @@ const MusicosAL = (function () {
       const ac = campo(a.raiz, a.menor);
       AL.limpar(tomEl, h("b", {}, "🎼 Tom provável: " + nomeTom(a.raiz, a.menor)),
         h("div", { class: "mudo" }, "Pode ser também: " + nomeTom(relativo.raiz, relativo.menor) + " (tom relativo) · segunda opção: " + nomeTom(r[1].raiz, r[1].menor) + " · " + Math.round(tot) + " s ouvidos"),
-        h("div", { class: "linha", style: { gap: ".35rem", "flex-wrap": "wrap", margin: ".4rem 0" } }, ac.filter((x) => !x.grau.includes("°")).map((x) => h("span", { class: "pilula", style: { padding: ".3rem .6rem", "border-radius": "20px", background: "#0e5a4f", border: "2px solid #f2c94c", "font-weight": "800" } }, x.cifra))),
-        h("small", { class: "mudo" }, "Comece com o primeiro acorde (" + ac[0].cifra + "). Os outros são os acordes que mais aparecem neste tom."));
+        h("div", { class: "linha", style: { gap: ".35rem", "flex-wrap": "wrap", margin: ".4rem 0" } }, ac.filter((x) => !x.grau.includes("°")).map((x) => h("span", { class: "pilula", style: { padding: ".3rem .6rem", "border-radius": "20px", background: "#0e5a4f", border: "2px solid #f2c94c", "font-weight": "800" } }, rotAcorde(x.cifra)))),
+        h("small", { class: "mudo" }, "Comece com o primeiro acorde (" + rotAcorde(ac[0].cifra) + "). Os outros são os acordes que mais aparecem neste tom."));
     }
     async function ligar() {
       if (mic) { mic.fechar(); mic = null; botao.textContent = "🎤 Ligar o microfone"; return; }
@@ -147,9 +185,10 @@ const MusicosAL = (function () {
     let ultimoTom = 0;
     function mostrar(m) {
       const p = pc(m), oit = Math.floor(Math.round(m) / 12) - 1;
-      grande.textContent = PT[p] + " · " + CIF[p];
-      sub.textContent = "Oitava " + oit + " · " + Math.round(freq(m)) + " Hz";
-      if (p !== ultimaMostrada) { ultimaMostrada = p; desenhar(p); }
+      // Básico: "Sol"; Intermediário: "G" (com "Sol" pequeno); Avançado: "G" e a nota na partitura
+      grande.textContent = leitura === 0 ? PT[p] : CIF[p];
+      sub.textContent = (leitura === 0 ? "" : PT[p] + " · ") + "Oitava " + oit + " · " + Math.round(freq(m)) + " Hz";
+      if (p !== ultimaMostrada) { ultimaMostrada = p; desenhar(p); if (leitura === 2) pauta(caixaPauta, [Math.round(m)], false).catch(() => {}); }
       if (Date.now() - ultimoTom > 1500) { ultimoTom = Date.now(); mostrarTom(); }
     }
     botao.onclick = ligar;
@@ -157,7 +196,7 @@ const MusicosAL = (function () {
     AL.limpar(el, h("div", { class: "cartao" },
       h("h2", {}, "🎤 Nota do cantor"),
       h("p", { class: "mudo" }, "Deixe o celular perto de quem canta. A nota aparece grande, no seu instrumento, e o sistema vai descobrindo o tom da música."),
-      h("label", {}, "Meu instrumento"), selInstr, h("div", { style: { margin: ".6rem 0" } }, botao), grande, sub, desenhos, tomEl,
+      h("label", {}, "Meu instrumento"), selInstr, h("div", { style: { margin: ".6rem 0" } }, botao), grande, sub, caixaPauta, desenhos, tomEl,
       h("button", { onclick: () => { hist = new Array(12).fill(0); AL.limpar(tomEl, h("b", {}, "🎼 Tom provável: "), "ainda ouvindo…"); } }, "↺ Começar outra música"),
       h("p", { class: "mudo" }, "Dica: o tom fica mais certo depois de uns 15 a 20 segundos de música. O microfone é usado só ao vivo, neste aparelho: nada é gravado.")));
     desenhar(null);
@@ -167,21 +206,23 @@ const MusicosAL = (function () {
   // ---------------------------------------------------------------- 2) tom e acordes + trocar o tom da cifra
   function telaTom(el) {
     let instr = "teclado";
-    const selRaiz = h("select", { "aria-label": "Tom" }, PT.map((n, i) => h("option", { value: i }, n + " (" + CIF[i] + ")")));
+    const selRaiz = h("select", { "aria-label": "Tom" }, PT.map((n, i) => h("option", { value: i }, leitura === 0 ? n : n + " (" + CIF[i] + ")")));
     const selModo = h("select", { "aria-label": "Maior ou menor" }, [["0", "Maior"], ["1", "Menor"]].map(([v, t]) => h("option", { value: v }, t)));
     const selInstr = h("select", { "aria-label": "Instrumento" }, [["teclado", "🎹 Teclado"], ["violao", "🎸 Violão / guitarra"], ["baixo", "🎸 Contrabaixo"]].map(([v, t]) => h("option", { value: v }, t)));
-    const lista = h("div"), desenho = h("div"), titulo = h("h3");
+    const lista = h("div"), desenho = h("div"), titulo = h("h3"), caixaPauta = h("div");
     function mostrarAcorde(x) {
       const d = new Set(x.notas);
-      AL.limpar(desenho, h("p", {}, h("b", {}, x.cifra), " = " + x.nomes), instr === "teclado" ? h("div", { html: "" }) : braco(instr, d, x.raiz));
+      const base = 48 + x.raiz, midis = x.notas.map((p) => base + ((p - x.raiz + 12) % 12));
+      AL.limpar(desenho, h("p", {}, h("b", {}, rotAcorde(x.cifra)), " = " + x.nomes + (leitura === 0 ? "" : " (" + x.notas.map((p) => nomeCif(p, /b/.test(x.cifra))).join(" ") + ")")), caixaPauta, instr === "teclado" ? h("div", { html: "" }) : braco(instr, d, x.raiz));
       if (instr === "teclado") desenho.lastChild.innerHTML = teclado(d, x.raiz);
-      const base = 48 + x.raiz; acorde(x.notas.map((p) => base + ((p - x.raiz + 12) % 12)), audio().currentTime + 0.05, 1.4);
+      if (leitura === 2) pauta(caixaPauta, midis.map((m) => m + 12), /b/.test(x.cifra)).catch(() => {}); else caixaPauta.textContent = "";
+      acorde(midis, audio().currentTime + 0.05, 1.4);
     }
     function atualizar() {
       instr = selInstr.value;
       const raiz = Number(selRaiz.value), menor = selModo.value === "1", ac = campo(raiz, menor);
       titulo.textContent = "Campo harmônico de " + nomeTom(raiz, menor);
-      AL.limpar(lista, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap" } }, ac.map((x) => h("button", { onclick: () => mostrarAcorde(x), title: x.nomes }, x.grau + " · " + x.cifra))));
+      AL.limpar(lista, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap" } }, ac.map((x) => h("button", { onclick: () => mostrarAcorde(x), title: x.nomes }, leitura === 2 ? x.grau + " · " + x.cifra : rotAcorde(x.cifra)))));
       mostrarAcorde(ac[0]);
     }
     [selRaiz, selModo, selInstr].forEach((s) => (s.onchange = atualizar));
@@ -195,6 +236,7 @@ const MusicosAL = (function () {
         h("p", { class: "mudo" }, "Escolha o tom: aparecem os acordes do tom. Toque num acorde para ouvir e ver as notas."),
         h("div", { class: "linha", style: { gap: ".5rem", "flex-wrap": "wrap" } }, selRaiz, selModo, selInstr), titulo, lista, desenho),
       h("div", { class: "cartao" }, h("h2", {}, "🔁 Trocar o tom da cifra"),
+        leitura === 0 ? h("p", { class: "aviso" }, "Esta parte usa cifras (C, D, Em…): é do nível Intermediário. Se ainda não lê cifra, comece pelos nomes das notas acima.") : null,
         h("p", { class: "mudo" }, "O cantor pediu outro tom? Cole a cifra, diga o tom de agora e o tom novo. Só os acordes mudam; a letra fica igual."),
         cifra, h("div", { class: "linha", style: { gap: ".5rem", "align-items": "center", "flex-wrap": "wrap", margin: ".5rem 0" } }, "Tom de agora:", de, "→ Tom novo:", para, h("button", { class: "primario", onclick: transpor }, "Trocar o tom")), saida));
     atualizar();
@@ -235,7 +277,7 @@ const MusicosAL = (function () {
         if (id === "nota") {
           const naturais = [0, 2, 4, 5, 7, 9, 11], p = n === 0 ? naturais[Math.floor(Math.random() * 7)] : Math.floor(Math.random() * 12);
           atual = { p, midi: 60 + p };
-          AL.limpar(respostas, (n === 0 ? naturais : [...Array(12).keys()]).map((x) => h("button", { style: { "min-width": "4.2rem" }, onclick: () => responder(x === p, PT[p]) }, PT[x])));
+          AL.limpar(respostas, (n === 0 ? naturais : [...Array(12).keys()]).map((x) => h("button", { style: { "min-width": "4.2rem" }, onclick: () => responder(x === p, rotNota(p)) }, rotNota(x))));
         } else {
           const raiz = n === 2 ? 52 + Math.floor(Math.random() * 12) : 55 + Math.floor(Math.random() * 7), menor = Math.random() < 0.5;
           atual = { menor, notas: [raiz, raiz + (menor ? 3 : 4), raiz + 7], arpejo: Math.random() < 0.5 };
@@ -341,10 +383,10 @@ const MusicosAL = (function () {
         const ac = campo(r.tom.raiz, r.tom.menor);
         AL.limpar(resultado,
           h("div", { class: "cartao" }, h("h2", {}, "🎼 Tom provável: " + nomeTom(r.tom.raiz, r.tom.menor)),
-            h("p", {}, "Acordes do tom: ", ac.filter((x) => !x.grau.includes("°")).map((x) => x.cifra).join(" · ")),
-            r.principal ? h("p", {}, h("b", {}, "Sequência que mais se repete: "), r.principal) : null),
+            h("p", {}, "Acordes do tom: ", ac.filter((x) => !x.grau.includes("°")).map((x) => rotAcorde(x.cifra)).join(" · ")),
+            r.principal ? h("p", {}, h("b", {}, "Sequência que mais se repete: "), r.principal.split(" – ").map(rotAcorde).join(" – ")) : null),
           h("div", { class: "cartao" }, h("h2", {}, "⏱ Acordes ao longo do louvor (sugestão)"),
-            h("div", { class: "linha", style: { gap: ".35rem", "flex-wrap": "wrap" } }, r.acordes.map((a) => h("span", { style: { padding: ".35rem .6rem", "border-radius": "10px", background: "#0e5a4f", border: "1px solid #f2c94c", "font-weight": "700" } }, mmss(a.ini) + " " + a.cifra))),
+            h("div", { class: "linha", style: { gap: ".35rem", "flex-wrap": "wrap" } }, r.acordes.map((a) => h("span", { style: { padding: ".35rem .6rem", "border-radius": "10px", background: "#0e5a4f", border: "1px solid #f2c94c", "font-weight": "700" } }, mmss(a.ini) + " " + rotAcorde(a.cifra)))),
             h("p", { class: "mudo" }, "É uma sugestão automática: confira de ouvido. Em “Tom e acordes” dá para ouvir cada acorde e trocar o tom.")));
       } catch (e) { estado.textContent = "⚠️ " + e.message; }
       finally { ocupado = false; barra.style.display = "none"; }
@@ -363,10 +405,12 @@ const MusicosAL = (function () {
     const area = h("div");
     const abas = [["Nota do cantor", telaNota], ["Tom e acordes", telaTom], ["Louvor gravado", telaGravado], ["Percepção", telaPercepcao]];
     const botoes = abas.map(([nome, fn]) => h("button", { onclick: (e) => { if (atual) atual.parar(); botoes.forEach((b) => b.classList.remove("ligado")); e.currentTarget.classList.add("ligado"); atual = fn(area); } }, nome));
-    AL.limpar(el, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".6rem" } }, botoes), area);
+    // trocar a leitura desenha de novo a aba aberta
+    const leituraEl = seletorLeitura(() => { const b = botoes.find((x) => x.classList.contains("ligado")); if (b) b.click(); });
+    AL.limpar(el, leituraEl, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".6rem" } }, botoes), area);
     botoes[0].click();
     return { parar: () => { if (atual) atual.parar(); } };
   }
 
-  return { painel, _descobrirTom: descobrirTom, _campo: campo, _transporLinha: transporLinha, _analisarNotas: analisarNotas, carregarScript };
+  return { painel, _descobrirTom: descobrirTom, _campo: campo, _transporLinha: transporLinha, _analisarNotas: analisarNotas, carregarScript, seletorLeitura, leitura: () => leitura, _cifraParaPT: cifraParaPT };
 })();

@@ -172,6 +172,8 @@ const BateriaAL = (function () {
   // partitura do ritmo (20/11/2026) com o VexFlow (licença MIT, static/vendor/vexflow): só carrega quando pedem.
   // Bumbo no espaço de baixo, caixa no 3º espaço, chimbal e prato com cabeça em "x" em cima (escrita comum de bateria).
   const NOTA_PECA = { prato: "a/5/x2", chimbal: "g/5/x2", caixa: "c/5", bumbo: "f/4" };
+  // forma de leitura guardada no aparelho (0 Básico, 1 Intermediário, 2 Avançado) — a mesma dos Músicos
+  const leituraBat = () => (typeof MusicosAL !== "undefined" ? MusicosAL.leitura() : (() => { try { return Number(localStorage.getItem("al_leitura")) || 0; } catch (e) { return 0; } })());
   async function desenharPartitura(caixa, r, grade) {
     const carregar = typeof MusicosAL !== "undefined" ? MusicosAL.carregarScript : (src) => new Promise((ok, erro) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = erro; document.head.append(s); });
     await carregar("vendor/vexflow/vexflow.js");
@@ -229,7 +231,8 @@ const BateriaAL = (function () {
       tab.append(h("div"));
       for (let p = 0; p < passos(); p++) {
         const t = Math.floor(p / r.ppt), s = p % r.ppt;
-        const rot = s === 0 ? String(t + 1) : r.ppt === 4 ? ["", "e", "&", "a"][s] : ["", "e", "a"][s];
+        // Básico: só os números dos tempos; Intermediário/Avançado: a contagem completa (1 e & a)
+        const rot = s === 0 ? String(t + 1) : leituraBat() === 0 ? "" : r.ppt === 4 ? ["", "e", "&", "a"][s] : ["", "e", "a"][s];
         tab.append(h("div", { style: { "text-align": "center", "font-size": ".8rem", color: s === 0 ? "#fff" : "#7d97a1", "font-weight": s === 0 ? "800" : "400" } }, rot));
       }
       PECAS.forEach(([id, nome]) => {
@@ -281,7 +284,10 @@ const BateriaAL = (function () {
       h("div", { class: "linha", style: { gap: ".5rem", "flex-wrap": "wrap", "align-items": "center", margin: ".5rem 0" } },
         h("button", { onclick: () => { num.value = bpm - 5; num.onchange(); } }, "− 5"), num, h("button", { onclick: () => { num.value = bpm + 5; num.onchange(); } }, "+ 5"), h("span", {}, "BPM"), botaoClique),
       h("label", {}, "Volume"), vol,
-      botao, contagem, caixaGrade, botaoPartitura, legenda, partitura, h("b", {}, "Calar uma peça (você toca ela):"), botoesMudo, nota));
+      botao, contagem, caixaGrade,
+      // a partitura é do nível Avançado de leitura (nem todo mundo lê partitura)
+      leituraBat() === 2 ? botaoPartitura : h("p", { class: "mudo" }, "📄 A partitura deste ritmo aparece no nível Avançado de leitura (escolha em “📖 Leitura”, no alto)."),
+      legenda, partitura, h("b", {}, "Calar uma peça (você toca ela):"), botoesMudo, nota));
     escolher();
     return { parar: () => m.parar() };
   }
@@ -433,7 +439,9 @@ const BateriaAL = (function () {
     const area = h("div");
     const abas = [["Metrônomo do baterista", telaMetronomo], ["Ritmos de louvor", telaRitmos], ["Exercícios com nota", telaExercicios]];
     const botoes = abas.map(([nome, fn]) => h("button", { onclick: (e) => { if (atual) atual.parar(); botoes.forEach((b) => b.classList.remove("ligado")); e.currentTarget.classList.add("ligado"); atual = fn(area); } }, nome));
-    AL.limpar(el, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".6rem" } }, botoes), area);
+    // mesma escolha de leitura dos Músicos (Dó Ré Mi / cifra / partitura); trocar desenha de novo a aba aberta
+    const leituraEl = typeof MusicosAL !== "undefined" ? MusicosAL.seletorLeitura(() => { const b = botoes.find((x) => x.classList.contains("ligado")); if (b) b.click(); }) : null;
+    AL.limpar(el, leituraEl, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".6rem" } }, botoes), area);
     botoes[0].click();
     return { parar: () => { if (atual) atual.parar(); } };
   }
