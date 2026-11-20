@@ -29,11 +29,11 @@
   // O professor marca as matérias com nota baixa; aqui o aluno vê o que precisa treinar para recuperar.
   // Os níveis (Básico → Intermediário → Avançado) abrem com 3 treinos de 80% ou mais no nível de agora.
   const FAM = [["Afinação", "afinacao"], ["Segunda voz", "segunda"], ["Aquecimento", "aquecimento"], ["Vogais", "vogais"], ["Respiração", "respiracao"]];
-  const familia = (t) => (t.area === "ouvido" || t.area === "regencia" ? t.area : (FAM.find(([pre]) => String(t.treino).startsWith(pre)) || [null, ""])[1]);
+  const familia = (t) => (["ouvido", "regencia", "bateria", "musico"].includes(t.area) ? t.area : (FAM.find(([pre]) => String(t.treino).startsWith(pre)) || [null, ""])[1]);
   const nivelDoTreino = (t) => (/· Avançado/.test(t.treino) ? 2 : /· Intermediário/.test(t.treino) ? 1 : 0);
   const diaLocal = (iso) => { const d = new Date(iso); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   const ONDE = { afinacao: ["Laboratório da voz", "🎯 Afinação"], segunda: ["Laboratório da voz", "🎶 Segunda voz"], aquecimento: ["Laboratório da voz", "🔥 Aquecimento"],
-    vogais: ["Laboratório da voz", "🗣 Vogais e projeção"], respiracao: ["Laboratório da voz", "💨 Respiração (sssss)"], ouvido: ["Treino de ouvido"], regencia: ["Regência com câmera"] };
+    vogais: ["Laboratório da voz", "🗣 Vogais e projeção"], respiracao: ["Laboratório da voz", "💨 Respiração (sssss)"], ouvido: ["Treino de ouvido"], regencia: ["Regência com câmera"], bateria: ["🥁 Bateria", "Exercícios com nota"], musico: ["🎸 Músicos", "Percepção"] };
   const recupEl = h("div"), avisoCert = h("div"), corpoBoletim = h("div"), seguidosEl = h("div");
   // dias seguidos treinando (conta até hoje; se ainda não treinou hoje, a sequência de ontem continua valendo)
   function desenharSeguidos() {
@@ -258,7 +258,7 @@
     function trocar(id) {
       barra.querySelectorAll("button").forEach((b) => b.classList.toggle("ligado", b.dataset.aba === id));
       abas.forEach(([x, , el]) => el.classList.toggle("oculto", x !== id));
-      if (id === "notas") carregarNotas(); else if (id === "treino" && !corpoTreino.childElementCount) FerramentasAL.montar(corpoTreino, { semTelao: true, itens: ["labvoz", "ouvido", "camera", "metronomo", "bateria"] });
+      if (id === "notas") carregarNotas(); else if (id === "treino" && !corpoTreino.childElementCount) FerramentasAL.montar(corpoTreino, { semTelao: true, itens: ["labvoz", "ouvido", "camera", "metronomo", "bateria", "musicos"] });
       if (id !== "treino") FerramentasAL.parar();
     }
     irPara = (id) => { trocar(id); barra.scrollIntoView({ behavior: "smooth" }); };

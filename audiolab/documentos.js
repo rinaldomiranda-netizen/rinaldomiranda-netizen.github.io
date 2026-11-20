@@ -65,6 +65,21 @@ const DocsAL = (() => {
         + notaSVG(138, 72, 0.6, ARTE_O, false) + "</svg>",
       marca: "🎚️", rotulo: "Operação de Som",
     },
+    // 20/11/2026: bateria (caixa com baquetas e prato)
+    bateria: {
+      esq: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 240">'
+        + '<ellipse cx="80" cy="120" rx="58" ry="16" fill="#e8f3ef" stroke="' + ARTE_V + '" stroke-width="3"/>'
+        + '<path d="M22 120 L22 180 Q80 205 138 180 L138 120" fill="' + ARTE_V + '"/>'
+        + Array.from({ length: 6 }, (_, i) => '<line x1="' + (30 + i * 20) + '" y1="' + (128 + (i % 2) * 4) + '" x2="' + (30 + i * 20) + '" y2="186" stroke="' + ARTE_O + '" stroke-width="3"/>').join("")
+        + '<ellipse cx="80" cy="182" rx="58" ry="14" fill="none" stroke="' + ARTE_O + '" stroke-width="3"/>'
+        + '<line x1="40" y1="30" x2="86" y2="112" stroke="#1d2b28" stroke-width="5" stroke-linecap="round"/><line x1="128" y1="34" x2="92" y2="112" stroke="#1d2b28" stroke-width="5" stroke-linecap="round"/>'
+        + notaSVG(24, 60, 0.6, ARTE_O, false) + "</svg>",
+      dir: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 240"><ellipse cx="82" cy="70" rx="60" ry="12" fill="' + ARTE_O + '" transform="rotate(-10 82 70)"/>'
+        + '<ellipse cx="82" cy="70" rx="14" ry="4" fill="#1d2b28" transform="rotate(-10 82 70)"/><line x1="82" y1="72" x2="82" y2="215" stroke="#1d2b28" stroke-width="4"/>'
+        + '<path d="M82 215 L52 232 M82 215 L112 232 M82 215 L82 234" stroke="#1d2b28" stroke-width="4" stroke-linecap="round"/>'
+        + notaSVG(124, 130, 0.8, ARTE_V, true) + notaSVG(40, 160, 0.6, ARTE_V, false) + "</svg>",
+      marca: "🥁", rotulo: "Bateria",
+    },
   };
 
   // ---------- logo do curso: selo redondo com nota musical e ondas de som
@@ -90,7 +105,7 @@ const DocsAL = (() => {
     let notas = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140"><g opacity="0.07">' + notaSVG(24, 46, 0.55, "#0b6b5a", false) + notaSVG(88, 112, 0.5, "#9c7a12", true) + "</g></svg>";
     return { ondas: dataURI(ondas), notas: dataURI(notas), logo: dataURI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g opacity="0.09">' + logoSVG(100).replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "") + "</g></svg>") };
   }
-  const ICONE = { som: "🎚️", louvor: "🎤", regencia: "🎼" };
+  const ICONE = { som: "🎚️", louvor: "🎤", regencia: "🎼", bateria: "🥁" };
 
   // ======================================================================= BOLETIM
   function boletimHTML(doc, info) {

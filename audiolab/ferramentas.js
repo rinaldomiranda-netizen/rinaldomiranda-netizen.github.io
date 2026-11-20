@@ -200,6 +200,11 @@ const FerramentasAL = (() => {
     if (typeof BateriaAL === "undefined") { AL.limpar(el, h("div", { class: "cartao" }, "Bateria indisponível.")); return; }
     ativo = BateriaAL.painel(el);
   }
+  // 20/11/2026: músicos — violão, teclado e contrabaixo (static/musicos.js)
+  function telaMusicos(el) {
+    if (typeof MusicosAL === "undefined") { AL.limpar(el, h("div", { class: "cartao" }, "Músicos indisponível.")); return; }
+    ativo = MusicosAL.painel(el);
+  }
 
   function telaLabVoz(el) {
     if (typeof LabVoz === "undefined") { AL.limpar(el, h("div", { class: "cartao" }, "Laboratório indisponível.")); return; }
@@ -440,7 +445,7 @@ const FerramentasAL = (() => {
       const area = h("div");
       const itens = [["sinais", "Sinais de teste", telaSinais], ["eq", "EQ 32 bandas", (e) => telaEQ(e, opcoes.arquivoAudio)], ["analisador", "Analisador (mesa física)", telaAnalisador],
         ["vocal", "Teste vocal", telaVocal], ["ritmo", "Ritmo / regência", telaRitmo], ["metronomo", "Metrônomo", telaMetronomo], ["labvoz", "Laboratório da voz", telaLabVoz],
-        ["ouvido", "Treino de ouvido", telaOuvido], ["camera", "Regência com câmera", telaCamera], ["bateria", "🥁 Bateria", telaBateria]]
+        ["ouvido", "Treino de ouvido", telaOuvido], ["camera", "Regência com câmera", telaCamera], ["bateria", "🥁 Bateria", telaBateria], ["musicos", "🎸 Músicos", telaMusicos]]
         // o treino em casa mostra só alguns treinos, na ordem pedida
         .filter((x) => !opcoes.itens || opcoes.itens.includes(x[0])).sort((a, b) => (opcoes.itens ? opcoes.itens.indexOf(a[0]) - opcoes.itens.indexOf(b[0]) : 0));
       const botoes = itens.map(([id, nome, fn]) => h("button", { onclick: (e) => { parar(); botoes.forEach((b) => b.classList.remove("ligado")); e.currentTarget.classList.add("ligado"); fn(area); } }, nome));

@@ -7,13 +7,13 @@
 const TreinosAL = (() => {
   const h = AL.h;
   let modo = null, token = null, ultimoNome = "", conhecidos = null, serie = 0, enviarCasa = null;
-  const AREAS = { voz: "Laboratório da voz", ouvido: "Treino de ouvido", regencia: "Regência com câmera" };
+  const AREAS = { voz: "Laboratório da voz", ouvido: "Treino de ouvido", regencia: "Regência com câmera", bateria: "Bateria", musico: "Músicos (percepção)" };
 
   // ---------------- níveis (16/11/2026): Básico → Intermediário → Avançado
   // Na aula (professor e celular na sala) todos os níveis ficam abertos. Em casa, o próximo nível abre depois de
   // 3 treinos com 80% ou mais no nível de agora (o app de casa informa isso com definirLiberados).
   const NIVEIS = ["Básico", "Intermediário", "Avançado"];
-  const COM_NIVEL = { afinacao: "Afinação", segunda: "Segunda voz", ouvido: "Treino de ouvido", regencia: "Regência com câmera" };
+  const COM_NIVEL = { afinacao: "Afinação", segunda: "Segunda voz", ouvido: "Treino de ouvido", regencia: "Regência com câmera", bateria: "Bateria", musico: "Músicos (percepção)" };
   const PRECISA_NIVEL = 3;
   let liberados = null; // null = tudo aberto; senão { familia: { max: 0..2, faltam: n } }
   const escolhido = {}, forcados = {};
@@ -33,9 +33,13 @@ const TreinosAL = (() => {
     "vogais": { turmas: ["voz"], familia: "vogais", nome: "Vogais · nota longa", ferramenta: "Laboratório da voz", aba: "🗣 Vogais e projeção", botao: null, semNivel: true },
     "respiracao": { turmas: ["voz"], familia: "respiracao", nome: "Respiração · sssss", ferramenta: "Laboratório da voz", aba: "💨 Respiração (sssss)", botao: "🎙 Começar o Sssss", semNivel: true },
     "regencia": { turmas: ["regencia"], familia: "regencia", nome: "Regência com câmera", ferramenta: "Regência com câmera", botao: "📷 Ligar a câmera", regencia: true },
-    "ouvido": { turmas: ["som", "voz", "regencia"], familia: "ouvido", nome: "Treino de ouvido", ferramenta: "Treino de ouvido", botao: "▶ Começar o treino" },
+    "ouvido": { turmas: ["som", "voz", "regencia", "bateria"], familia: "ouvido", nome: "Treino de ouvido", ferramenta: "Treino de ouvido", botao: "▶ Começar o treino" },
+    // 20/11/2026: bateristas (static/bateria.js)
+    "bateria:tempo": { turmas: ["bateria"], familia: "bateria", nome: "Bateria · Tocar no tempo", ferramenta: "🥁 Bateria", aba: "Exercícios com nota", botao: "🎯 Tocar no tempo" },
+    "bateria:rudimento": { turmas: ["bateria"], familia: "bateria", nome: "Bateria · Rudimentos", ferramenta: "🥁 Bateria", aba: "Exercícios com nota", botao: "🥢 Rudimentos" },
+    "bateria:segurar": { turmas: ["bateria"], familia: "bateria", nome: "Bateria · Segure o tempo", ferramenta: "🥁 Bateria", aba: "Exercícios com nota", botao: "🔇 Segure o tempo" },
   };
-  const TURMAS = { som: "🎚️ Operadores de som", voz: "🎤 Vozes (cantores)", regencia: "🎼 Regência" };
+  const TURMAS = { som: "🎚️ Operadores de som", voz: "🎤 Vozes (cantores)", regencia: "🎼 Regência", bateria: "🥁 Bateristas" };
   // começa no Básico na aula; em casa começa no nível mais alto já liberado
   function nivel(f) { return Math.min(escolhido[f] != null ? escolhido[f] : liberados ? maxNivel(f) : 0, maxNivel(f)); }
   const rotulo = (f) => " · " + NIVEIS[nivel(f)];

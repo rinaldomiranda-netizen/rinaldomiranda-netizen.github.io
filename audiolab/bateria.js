@@ -245,16 +245,157 @@ const BateriaAL = (function () {
     return { parar: () => m.parar() };
   }
 
+  // ---------------------------------------------------------------- 3) exercícios com nota (20/11/2026)
+  // O aluno toca no botão grande da tela OU no pad/caixa/bateria com o microfone ligado. O sistema compara cada batida
+  // com o tempo certo: diz se está adiantando ou atrasando (em milésimos de segundo), se está regular e dá a nota.
+  // A nota vai para a pasta do aluno (área "bateria"), com o nível no nome (" · Básico" etc.), como os outros treinos.
+  const MAOS = { simples: "DEDE", duplo: "DDEE", paradiddle: "DEDDEDEE" };
+  const EXERCICIOS = {
+    tempo: { botao: "🎯 Tocar no tempo", nome: "Tocar no tempo", explica: "Toque junto com o clique, em cada batida, bem certinho.",
+      niveis: [{ bpm: 70, sub: 1, compassos: 4, tol: 35, txt: "70 BPM · uma batida por tempo" }, { bpm: 90, sub: 2, compassos: 4, tol: 28, txt: "90 BPM · colcheias (2 por tempo)" }, { bpm: 110, sub: 2, compassos: 4, tol: 22, txt: "110 BPM · colcheias" }] },
+    rudimento: { botao: "🥢 Rudimentos", nome: "Rudimentos", explica: "Siga as mãos na tela: D = direita, E = esquerda. Toque todas as batidas iguais.", escolhe: true,
+      niveis: [{ bpm: 60, sub: 2, compassos: 4, tol: 35, txt: "60 BPM · colcheias" }, { bpm: 80, sub: 2, compassos: 4, tol: 28, txt: "80 BPM · colcheias" }, { bpm: 80, sub: 4, compassos: 2, tol: 22, txt: "80 BPM · semicolcheias" }] },
+    segurar: { botao: "🔇 Segure o tempo", nome: "Segure o tempo", explica: "O clique vai sumir em alguns compassos. Continue tocando no tempo até ele voltar!",
+      niveis: [{ bpm: 70, sub: 1, compassos: 8, toca: 2, cala: 2, tol: 40, txt: "70 BPM · toca 2 compassos, cala 2" }, { bpm: 85, sub: 1, compassos: 8, toca: 2, cala: 2, tol: 32, txt: "85 BPM · toca 2, cala 2" }, { bpm: 100, sub: 1, compassos: 8, toca: 1, cala: 3, tol: 26, txt: "100 BPM · toca 1, cala 3" }] },
+  };
+  // microfone: detecta cada batida (ataque) pela subida rápida do volume. O limiar se ajusta ao volume do clique
+  // ouvido na contagem de entrada, para o próprio clique do celular não contar como batida.
+  async function abrirMicBateria(aoBater) {
+    if (!window.isSecureContext || !navigator.mediaDevices) throw new Error("O microfone só funciona no endereço seguro. No celular, use o botão “Abrir com microfone (endereço seguro)” das Ferramentas.");
+    const c = audio();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const src = c.createMediaStreamSource(stream), proc = c.createScriptProcessor(512, 1, 1), mudo = c.createGain(); mudo.gain.value = 0;
+    src.connect(proc); proc.connect(mudo).connect(c.destination);
+    const st = { limiar: 0.12, calibrando: false, picoCal: 0, ultimo: 0 };
+    proc.onaudioprocess = (e) => {
+      const d = e.inputBuffer.getChannelData(0); let pico = 0;
+      for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > pico) pico = v; }
+      const t = c.currentTime - d.length / c.sampleRate;      // momento aproximado em que o som chegou
+      if (st.calibrando) { st.picoCal = Math.max(st.picoCal, pico); return; }
+      if (pico > st.limiar && t - st.ultimo > 0.07) { st.ultimo = t; aoBater(t); }
+    };
+    return { st, fechar: () => { proc.onaudioprocess = null; try { proc.disconnect(); src.disconnect(); } catch (e) { /* ok */ } stream.getTracks().forEach((x) => x.stop()); } };
+  }
+  function avaliar(esperados, toques, intervalo, tol, mudos) {
+    // para cada batida esperada, o toque mais perto (até meia distância entre batidas)
+    const usados = new Set(), difs = [], difsMudo = [];
+    esperados.forEach((b, k) => {
+      let mel = -1, md = Infinity;
+      toques.forEach((t, i) => { const d = Math.abs(t - b); if (!usados.has(i) && d < md) { md = d; mel = i; } });
+      if (mel >= 0 && md < intervalo / 2) { usados.add(mel); const d = (toques[mel] - b) * 1000; difs.push(d); if (mudos && mudos[k]) difsMudo.push(d); }
+    });
+    const n = esperados.length, acertos = difs.length;
+    if (acertos < Math.max(3, n * 0.3)) return { nota: 0, acertos, n, poucos: true };
+    const media = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+    const med = media(difs), desv = Math.sqrt(difs.reduce((s, x) => s + (x - med) ** 2, 0) / difs.length);
+    const extras = Math.max(0, toques.length - acertos - 2);   // toques a mais (sobrando), com folga de 2
+    let nota = 100 - Math.max(0, Math.abs(med) - tol) * 0.6 - Math.max(0, desv - tol) * 0.7 - (n - acertos) * (150 / n) - extras * 2;
+    const r = { acertos, n, med, desv, extras };
+    if (difsMudo.length) { r.medMudo = media(difsMudo); r.acertosMudo = difsMudo.length; nota -= Math.max(0, Math.abs(r.medMudo) - tol * 1.5) * 0.4; }
+    r.nota = Math.max(0, Math.min(100, Math.round(nota)));
+    return r;
+  }
+  const dizerTempo = (ms, tol) => (Math.abs(ms) <= tol ? "no tempo ✅" : ms > 0 ? "atrasando " + Math.round(ms) + " ms" : "adiantando " + Math.round(-ms) + " ms");
+
+  function telaExercicios(el) {
+    let parar = () => {};
+    const area = h("div");
+    const lista = h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", margin: ".4rem 0" } },
+      Object.entries(EXERCICIOS).map(([id, x]) => h("button", { onclick: () => { parar(); parar = abrir(id); } }, x.botao)));
+    function abrir(id) {
+      const ex = EXERCICIOS[id];
+      let mic = null, rodando = false, timer = 0, raf = 0, saida = null;
+      const nivelBox = typeof TreinosAL !== "undefined" ? TreinosAL.seletorNivel("bateria", () => mostrarNivel()) : h("div");
+      const nivelAtual = () => (typeof TreinosAL !== "undefined" ? TreinosAL.nivel("bateria") : 0);
+      const selMaos = ex.escolhe ? h("select", { "aria-label": "Rudimento" }, [["simples", "Toque simples (D E D E)"], ["duplo", "Toque duplo (D D E E)"], ["paradiddle", "Paradiddle (D E D D E D E E)"]].map(([v, t]) => h("option", { value: v }, t))) : null;
+      const usarMic = h("input", { type: "checkbox" });
+      const infoNivel = h("p", { class: "mudo" });
+      const contador = h("div", { style: { "text-align": "center", "font-size": "3rem", "font-weight": "900", "min-height": "3.6rem" } });
+      const maosEl = h("div", { style: { display: "flex", gap: ".35rem", "justify-content": "center", "flex-wrap": "wrap", "min-height": "2.6rem", margin: ".3rem 0" } });
+      const pad = h("button", { class: "bloco", disabled: true, style: { "font-size": "1.6rem", padding: "2.2rem 1rem", "border-radius": "22px", "touch-action": "manipulation", "user-select": "none" } }, "🥁 TOQUE AQUI");
+      const resultado = h("div");
+      const comecar = h("button", { class: "primario bloco", style: { "font-size": "1.2rem", padding: ".9rem" } }, "▶ Começar");
+      function mostrarNivel() { const N = ex.niveis[nivelAtual()]; infoNivel.textContent = "Nível " + TreinosAL.NIVEIS[nivelAtual()] + ": " + N.txt + "."; }
+      function pararTudo() { rodando = false; clearInterval(timer); cancelAnimationFrame(raf); if (mic) { mic.fechar(); mic = null; } if (saida) { try { saida.disconnect(); } catch (e) { /* ok */ } saida = null; } pad.disabled = true; comecar.disabled = false; }
+      async function iniciar() {
+        pararTudo(); AL.limpar(resultado);
+        const N = ex.niveis[nivelAtual()], c = audio(), tempos = 4, sub = N.sub, passo = 60 / N.bpm / sub;
+        const maos = selMaos ? MAOS[selMaos.value] : null;
+        const total = tempos * sub * N.compassos, entrada = tempos;   // 1 compasso de contagem (só os tempos)
+        const lat = (c.outputLatency || 0) + (c.baseLatency || 0);   // o som sai um pouquinho depois do agendado
+        const toques = [];
+        if (usarMic.checked) {
+          try { mic = await abrirMicBateria((t) => toques.push(t)); }
+          catch (e) { AL.toast(e.message, true); usarMic.checked = false; return; }
+        }
+        saida = c.createGain(); saida.gain.value = 0.9; saida.connect(c.destination);
+        const t0 = c.currentTime + 0.4, inicio = t0 + entrada * (60 / N.bpm);
+        const esperados = [], mudos = [];
+        // contagem de entrada
+        for (let i = 0; i < entrada; i++) SOM.clique(c, t0 + i * 60 / N.bpm, i === 0 ? 2 : 1, 1, saida);
+        for (let k = 0; k < total; k++) {
+          const t = inicio + k * passo, comp = Math.floor(k / (tempos * sub)), noTempo = k % sub === 0;
+          const calado = id === "segurar" && (comp % (N.toca + N.cala)) >= N.toca;
+          if (!calado) SOM.clique(c, t, !noTempo ? 0 : (k % (tempos * sub) === 0 ? 2 : 1), noTempo ? 1 : 0.7, saida);
+          esperados.push(t + lat); mudos.push(calado);
+        }
+        if (mic) { mic.st.calibrando = true; mic.st.picoCal = 0; setTimeout(() => { if (mic) { mic.st.calibrando = false; mic.st.limiar = Math.max(0.08, mic.st.picoCal * 2.2); } }, (t0 - c.currentTime + entrada * 60 / N.bpm - 0.05) * 1000); }
+        const off = performance.now() / 1000 - c.currentTime;   // relógio da tela → relógio do áudio
+        pad.onpointerdown = (e) => { e.preventDefault(); if (rodando) { toques.push(performance.now() / 1000 - off); pad.style.background = "#49c7ef"; setTimeout(() => (pad.style.background = ""), 70); } };
+        AL.limpar(maosEl, maos ? maos.split("").map((m) => h("div", { style: { width: "2.3rem", height: "2.3rem", "border-radius": "10px", display: "grid", "place-items": "center", "font-weight": "900", "font-size": "1.2rem", border: "2px solid " + (m === "D" ? "#49c7ef" : "#f2c94c") } }, m)) : []);
+        rodando = true; pad.disabled = false; comecar.disabled = true;
+        const fim = inicio + total * passo + 0.6;
+        const desenhar = () => {
+          const agora = c.currentTime;
+          if (agora < inicio) contador.textContent = "Prepare… " + Math.min(entrada, Math.floor((agora - t0) / (60 / N.bpm)) + 1);
+          else {
+            const k = Math.min(total - 1, Math.floor((agora - inicio) / passo)), comp = Math.floor(k / (tempos * sub));
+            contador.textContent = mudos[k] ? "🔇 " + (Math.floor((k % (tempos * sub)) / sub) + 1) : String(Math.floor((k % (tempos * sub)) / sub) + 1);
+            if (maos) [...maosEl.children].forEach((b, i) => { b.style.background = i === k % maos.length ? (maos[i] === "D" ? "#49c7ef" : "#f2c94c") : "transparent"; b.style.color = i === k % maos.length ? "#0b1820" : ""; });
+            void comp;
+          }
+          if (agora < fim && rodando) raf = requestAnimationFrame(desenhar);
+        };
+        raf = requestAnimationFrame(desenhar);
+        timer = setInterval(() => {
+          if (c.currentTime < fim) return;
+          clearInterval(timer); pararTudo(); contador.textContent = "";
+          const r = avaliar(esperados, toques, passo, N.tol, id === "segurar" ? mudos : null);
+          const rotulo = "Bateria · " + ex.nome + (maos ? " (" + selMaos.options[selMaos.selectedIndex].text.split(" (")[0] + ")" : "") + (typeof TreinosAL !== "undefined" ? TreinosAL.rotulo("bateria") : "");
+          if (r.poucos) { AL.limpar(resultado, h("div", { class: "cartao aviso" }, "Poucas batidas captadas (" + r.acertos + " de " + r.n + "). " + (usarMic.checked ? "Toque mais forte perto do celular ou use o botão da tela." : "Toque no botão grande junto com o clique."))); return; }
+          const detalhe = dizerTempo(r.med, N.tol) + " · regularidade " + (r.desv <= N.tol ? "boa" : "irregular (" + Math.round(r.desv) + " ms)") + " · " + r.acertos + "/" + r.n + " batidas"
+            + (r.medMudo != null ? " · sem o clique: " + dizerTempo(r.medMudo, N.tol * 1.5) : "") + (r.extras ? " · " + r.extras + " toque(s) a mais" : "") + " · " + N.bpm + " BPM" + (usarMic.checked ? " · microfone" : "");
+          AL.limpar(resultado, h("div", { class: "cartao" },
+            h("h2", {}, "Resultado: " + r.nota + "%"),
+            h("p", {}, r.nota >= 80 ? "🎉 Muito bem! Pode subir o andamento ou o nível." : r.nota >= 50 ? "👍 Está no caminho. Repita prestando atenção no clique." : "🔁 Vamos de novo, mais devagar e com calma."),
+            h("ul", {}, h("li", {}, "Tempo: " + dizerTempo(r.med, N.tol)), h("li", {}, "Regularidade: " + (r.desv <= N.tol ? "boa" : "irregular — as batidas variam " + Math.round(r.desv) + " ms")),
+              h("li", {}, "Batidas certas: " + r.acertos + " de " + r.n), r.medMudo != null ? h("li", {}, "Quando o clique sumiu: " + dizerTempo(r.medMudo, N.tol * 1.5)) : null),
+            usarMic.checked ? h("p", { class: "mudo" }, "Com o microfone, o atraso do próprio celular pode mudar alguns milésimos. A regularidade vale do mesmo jeito.") : null,
+            typeof TreinosAL !== "undefined" ? TreinosAL.caixa("bateria", rotulo, r.nota, detalhe) : null));
+        }, 100);
+      }
+      comecar.onclick = iniciar;
+      AL.limpar(area, h("div", { class: "cartao" },
+        h("h2", {}, ex.botao), h("p", {}, ex.explica), nivelBox, infoNivel, selMaos ? h("div", {}, h("label", {}, "Rudimento"), selMaos) : null,
+        h("label", { class: "linha", style: { gap: ".5rem", "align-items": "center", margin: ".5rem 0" } }, usarMic, h("span", {}, "🎤 Ouvir pelo microfone (toque no pad, na caixa ou na bateria). Desligado: toque no botão grande.")),
+        comecar, contador, maosEl, pad, h("p", { class: "mudo" }, "Há 1 compasso de contagem antes de começar. Use fone de ouvido se puder."), resultado));
+      mostrarNivel();
+      return pararTudo;
+    }
+    AL.limpar(el, h("div", { class: "cartao" }, h("h2", {}, "📝 Exercícios com nota"), h("p", { class: "mudo" }, "A nota vai para a pasta do aluno e o professor acompanha. Níveis: Básico → Intermediário → Avançado."), lista), area);
+    return { parar: () => parar() };
+  }
+
   // ---------------------------------------------------------------- painel com as abas
   function painel(el) {
     let atual = null;
     const area = h("div");
-    const abas = [["Metrônomo do baterista", telaMetronomo], ["Ritmos de louvor", telaRitmos]];
+    const abas = [["Metrônomo do baterista", telaMetronomo], ["Ritmos de louvor", telaRitmos], ["Exercícios com nota", telaExercicios]];
     const botoes = abas.map(([nome, fn]) => h("button", { onclick: (e) => { if (atual) atual.parar(); botoes.forEach((b) => b.classList.remove("ligado")); e.currentTarget.classList.add("ligado"); atual = fn(area); } }, nome));
     AL.limpar(el, h("div", { class: "linha", style: { gap: ".4rem", "flex-wrap": "wrap", "margin-bottom": ".6rem" } }, botoes), area);
     botoes[0].click();
     return { parar: () => { if (atual) atual.parar(); } };
   }
 
-  return { painel, RITMOS };
+  return { painel, RITMOS, EXERCICIOS, _avaliar: avaliar };
 })();
