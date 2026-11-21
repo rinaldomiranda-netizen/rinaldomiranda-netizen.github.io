@@ -1,38 +1,28 @@
 <!doctype html>
-<html lang="pt-BR" data-tema="escuro">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#070b0e">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="AudioLab">
-<title>RMD AudioLab — Treino em casa</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="comum.css">
-<style>
-  main { max-width: 980px; margin: 0 auto; padding: 1rem; }
-  .entrar { max-width: 440px; margin: 5vh auto; }
-  .abas { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
-  .abas button { flex: 1 1 140px; }
-  .codigo { text-transform: uppercase; letter-spacing: .15em; font-size: 1.4rem; text-align: center; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RMD AudioLab mudou de endereço</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070b0e;color:#e8f3f6;font-family:system-ui,Segoe UI,Roboto,sans-serif;text-align:center;padding:1.5rem}a{display:inline-block;margin-top:1rem;background:#49c7ef;color:#061014;font-weight:800;padding:1rem 1.4rem;border-radius:14px;text-decoration:none;font-size:1.1rem}</style>
 </head>
 <body>
-<header class="cabeca" id="cabeca"></header>
-<main id="app"></main>
-<script src="comum.js"></script>
-<script src="motor.js"></script>
-<script src="figuras.js"></script>
-<script src="metronomo.js"></script>
-<script src="bateria.js"></script>
-<script src="musicos.js"></script>
-<script src="vocal.js"></script>
-<script src="treinos.js"></script>
-<script src="ferramentas.js"></script>
-<script src="documentos.js"></script>
-<script src="casa.js"></script>
+<div>
+  <h1>🎧 O RMD AudioLab mudou de endereço</h1>
+  <p>Agora ele tem o endereço próprio, separado dos outros sistemas.</p>
+  <a id="ir" href="https://rmd-audiolab.github.io/">Abrir o RMD AudioLab</a>
+  <p style="opacity:.7;font-size:.9rem;margin-top:1rem">Depois, toque em “Instalar o ícone” no novo endereço.</p>
+</div>
+<script>
+// 20/11/2026: o treino em casa saiu de rinaldomiranda-netizen.github.io/audiolab (junto do RMD Ponto) e foi para endereço próprio.
+// Leva o código do aluno (?c=...) junto e apaga a cópia antiga guardada no celular.
+(function () {
+  var novo = "https://rmd-audiolab.github.io/" + (location.search || "");
+  document.getElementById("ir").href = novo;
+  try { if (navigator.serviceWorker) navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { if (r.scope.indexOf("/audiolab/") >= 0) r.unregister(); }); }); } catch (e) {}
+  try { if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { if (k.indexOf("rmd-audiolab-casa-") === 0) caches.delete(k); }); }); } catch (e) {}
+  setTimeout(function () { location.replace(novo); }, 800);
+})();
+</script>
 </body>
 </html>
